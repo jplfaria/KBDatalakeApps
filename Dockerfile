@@ -18,9 +18,7 @@ RUN apt-get update && apt-get install -y \
 # - SharedEnvUtils: Configuration and token management
 # -----------------------------------------
 RUN cd /kb/module && \
-    git clone https://github.com/cshenry/KBUtilLib.git && \
-    cd KBUtilLib && \
-    pip install -e .
+    git clone https://github.com/cshenry/KBUtilLib.git
 
 # -----------------------------------------
 # Copy module files
