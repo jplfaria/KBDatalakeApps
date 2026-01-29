@@ -8,6 +8,8 @@ import shutil
 from installed_clients.KBaseReportClient import KBaseReport
 from installed_clients.DataFileUtilClient import DataFileUtil
 
+from cobrakbase import KBaseAPI
+
 # Import KBUtilLib utilities for common functionality
 #from kbutillib import KBWSUtils, KBCallbackUtils, SharedEnvUtils
 
@@ -62,6 +64,7 @@ Author: chenry
 
         # Initialize KBUtilLib utilities
         self.dfu = DataFileUtil(self.callback_url)
+        self.kbase_api = KBaseAPI(os.environ['KB_AUTH_TOKEN'], config=config)
         #self.utils = DatalakeAppUtils(callback_url=self.callback_url)
         #END_CONSTRUCTOR
         pass
@@ -99,6 +102,8 @@ Author: chenry
         suffix = params.get('suffix', '')
         save_models = params.get('save_models', 0)
 
+        print(params)
+
         # Process the input references
         results_text = f"Building genome datalake tables.\n"
         results_text += f"Input references: {len(input_refs)} object(s)\n"
@@ -110,6 +115,28 @@ Author: chenry
         results_text += "Input objects:\n"
         for ref in input_refs:
             results_text += f"  - {ref}\n"
+
+        # Create KBaseFBA.GenomeDataLakeTables
+
+        output_object = {
+            'name': '',
+            'description': '',
+            'genomeset_ref': '',
+            'pangenome_data': [{
+                'pangenome_id': 'none',
+                'pangenome_taxonomy': 'none',
+                'user_genomes': [],
+                'datalake_genomes': [],
+                'table_handle_ref': ''
+            }],
+        }
+
+        self.kbase_api.save_object('demo_output',
+                                   params['workspace_name'],
+                                   'KBaseFBA.GenomeDataLakeTables',
+                                   output_object,
+                                   meta=output_object # adding all data as metadata
+        )
 
         # Create report with results
         report_client = KBaseReport(self.callback_url)

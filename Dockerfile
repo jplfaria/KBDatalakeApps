@@ -52,6 +52,7 @@ COPY ./ /kb/module
 RUN mkdir -p /kb/module/work
 RUN chmod -R a+rw /kb/module
 
+# @chenry add to requirements.txt
 #RUN cd /kb/module && git clone https://github.com/cshenry/KBUtilLib.git
 
 WORKDIR /kb/module
