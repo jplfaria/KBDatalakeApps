@@ -12,3 +12,6 @@ module-version:
 
 owners:
     [chenry,filipeliu,vibhavsetlur]
+
+data-version:
+    0.0.1

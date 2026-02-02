@@ -16,7 +16,8 @@ RUN apt-get install -y build-essential \
                        unzip \
                        htop \
                        curl \
-                       gcc
+                       gcc \
+                       cmake
 
 #RUN rm -rf /var/lib/apt/lists/*
 
@@ -29,8 +30,18 @@ ADD requirements_kbase.txt /tmp/requirements_kbase.txt
 RUN /usr/local/bin/pip install -r /tmp/requirements_kbase.txt
 ADD biokbase /opt/conda/lib/python3.11/site-packages
 ADD biokbase/user-env.sh /kb/deployment/user-env.sh
+# add rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
+RUN git clone https://github.com/soedinglab/MMseqs2.git /opt/MMseqs2
+RUN git clone https://github.com/bluenote-1577/skani.git /opt/skani
 
+ENV RUSTUP_INIT_SKIP_PATH_CHECK=yes
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN rustc --version && cargo --version
+WORKDIR /opt/skani
+RUN cargo install --path . --root ~/.cargo
 
 # -----------------------------------------
 # Install KBUtilLib for shared utilities
