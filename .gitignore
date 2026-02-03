@@ -1,4 +1,7 @@
 lib/KBDatalakeApps/KBDatalakeAppsImpl.py.bak*
+test/test_env
+jupyterhub_cookie_secret
+jupyterhub.sqlite
 
 # KBase SDK
 test_local/
@@ -24,7 +27,7 @@ htmlcov/
 *.egg-info/
 dist/
 build/
-
+git sta
 # Jupyter
 .ipynb_checkpoints/
 notebooks/datacache/

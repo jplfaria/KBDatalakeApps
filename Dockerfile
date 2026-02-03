@@ -15,11 +15,17 @@ RUN apt-get install -y build-essential \
                        openjdk-11-jre \
                        unzip \
                        htop \
+                       wget \
                        curl \
                        gcc \
                        cmake
 
 #RUN rm -rf /var/lib/apt/lists/*
+
+# Install uv (goes to /root/.local/bin by default)
+RUN wget -qO- https://astral.sh/uv/install.sh | sh
+RUN mkdir -p /opt/env
+RUN /root/.local/bin/uv venv --python 3.10 /opt/env/berdl_genomes
 
 # Copy in the SDK
 COPY --from=kbase/kb-sdk:1.2.1 /src /sdk
@@ -63,17 +69,19 @@ COPY ./ /kb/module
 RUN mkdir -p /kb/module/work
 RUN chmod -R a+rw /kb/module
 
+RUN /root/.local/bin/uv pip install --python /opt/env/berdl_genomes --no-progress -r /kb/module/berdl/requirements.txt
+
 # @chenry
 RUN mkdir -p /deps
 
 RUN echo '0' >/dev/null && pip install --use-deprecated=legacy-resolver git+https://github.com/cshenry/ModelSEEDpy.git
-RUN echo '0' >/dev/null && cd deps && \
+RUN echo '0' >/dev/null && cd /deps && \
 	git clone https://github.com/ModelSEED/ModelSEEDDatabase.git && \
     cd ModelSEEDDatabase && git checkout 3346b71a34bc9d8c5a365b71d5a2959ffbe6c26e
-RUN echo '0' >/dev/null && cd deps && \
+RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/cobrakbase.git && \
     cd cobrakbase && git checkout 68444e46fe3b68482da80798642461af2605e349
-RUN echo '0' >/dev/null && cd deps && \
+RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/KBUtilLib.git
 
 WORKDIR /kb/module

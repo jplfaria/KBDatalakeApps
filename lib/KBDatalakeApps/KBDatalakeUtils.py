@@ -16,7 +16,7 @@ folder_name = os.path.basename(script_dir)
 sys.path = ["/deps/KBUtilLib/src","/deps/cobrakbase","/deps/ModelSEEDpy"] + sys.path
 
 # Import utilities with error handling
-from kbutillib import KBModelUtils, KBReadsUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtils, MSBiochemUtils
+from kbutillib import KBModelUtils, KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtils, MSBiochemUtils
 
 import hashlib
 import pandas as pd
@@ -25,7 +25,7 @@ from modelseedpy import AnnotationOntology, MSPackageManager, MSTemplateBuilder,
 from modelseedpy.helpers import get_template
 
 
-class KBDataLakeUtils(KBReadsUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtils, MSBiochemUtils):
+class KBDataLakeUtils(KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtils, MSBiochemUtils):
     def __init__(self, directory, worker_count, parameters, **kwargs):
         super().__init__(
             name="KBDataLakeUtils",
@@ -164,7 +164,10 @@ class KBDataLakeUtils(KBReadsUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtil
     def pipeline_download_user_genome_assmemblies(self):
         """
         Pipeline step for downloading genome assemblies.
-        Reads user_genomes.tsv and downloads all assemblies to self.directory/assemblies.
+        Reads user_genomes.tsv and downloads one assembly per genome to
+        self.directory/assemblies/<genome_id>.fasta.  If multiple genomes
+        share the same assembly_ref the file is copied rather than
+        re-downloaded.
         """
         genomes_file = os.path.join(self.directory, "user_genomes.tsv")
         df = pd.read_csv(genomes_file, sep='\t')
@@ -172,16 +175,43 @@ class KBDataLakeUtils(KBReadsUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtil
         assemblies_dir = os.path.join(self.directory, "assemblies")
         os.makedirs(assemblies_dir, exist_ok=True)
 
-        assembly_refs = df['assembly_ref'].dropna().tolist()
-        assembly_refs = [ref for ref in assembly_refs if ref]
+        downloaded = {}  # assembly_ref -> first local fasta path
 
-        if not assembly_refs:
-            print("No assembly references found in user_genomes.tsv")
-            return
+        for _, row in df.iterrows():
+            genome_id = row['genome_id']
+            assembly_ref = row.get('assembly_ref', '')
+            if not assembly_ref or pd.isna(assembly_ref):
+                print(f"Warning: No assembly_ref for {genome_id}, skipping")
+                continue
 
-        print(f"Downloading {len(assembly_refs)} assemblies to {assemblies_dir}")
-        assembly_set = self.download_assembly(assembly_refs, assemblies_dir)
-        print(f"Downloaded {len(assembly_set.assemblies)} assemblies")
+            target_path = os.path.join(assemblies_dir, f"{genome_id}.fasta")
+
+            if assembly_ref in downloaded:
+                # Same assembly already downloaded for another genome – copy it
+                shutil.copy2(downloaded[assembly_ref], target_path)
+                print(f"  Copied assembly for {genome_id} (shared assembly_ref)")
+                continue
+
+            print(f"Downloading assembly for {genome_id}...")
+            try:
+                assembly_set = self.download_assembly([assembly_ref], assemblies_dir)
+                # Rename the assembly-id-named file to genome_id.fasta
+                for _name, assembly in assembly_set.assemblies.items():
+                    src = assembly.fasta_file
+                    if os.path.exists(src):
+                        shutil.move(src, target_path)
+                    break
+                downloaded[assembly_ref] = target_path
+                print(f"  Saved: {target_path}")
+            except Exception as e:
+                print(f"  Warning: Failed to download assembly for {genome_id}: {e}")
+
+        # Clean up the metadata file that download_assembly creates
+        meta_file = os.path.join(assemblies_dir, "assemblies_metadata.json")
+        if os.path.exists(meta_file):
+            os.remove(meta_file)
+
+        print(f"Downloaded {len(downloaded)} unique assemblies for {len(df)} genomes")
 
     def pipeline_run_skani_analysis(self):
         """
@@ -232,10 +262,27 @@ class KBDataLakeUtils(KBReadsUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtil
             except Exception as e:
                 print(f"  Warning: SKANI analysis against {db_name} failed: {e}")
 
+    def pipeline_run_pangenome_kberdl_query(self):
+        """
+        Pipeline step for running pangenome query against KBase BERDL.
+        """
+        #TODO: Jose should fill in his code for kberdle query using API here using SKANI results as input
+
     def pipeline_download_user_genome_genes(self):
         """
         Pipeline step for downloading genome genes and annotations.
         Creates a TSV table per genome in self.directory/genomes/<genome_id>.tsv.
+
+        Uses KBAnnotationUtils.process_object to standardise features and
+        ontology terms.  Each distinct ontology type discovered on a genome's
+        features becomes its own column headed ``Annotation:<type>`` (e.g.
+        ``Annotation:SSO``, ``Annotation:KO``).  Individual terms within the
+        column are semicolon-separated and formatted as::
+
+            TERMID:description|rxn1,rxn2
+
+        where the reaction IDs are ModelSEED reaction mappings (omitted when
+        no mapping exists).
         """
         genomes_file = os.path.join(self.directory, "user_genomes.tsv")
         df = pd.read_csv(genomes_file, sep='\t')
@@ -249,16 +296,37 @@ class KBDataLakeUtils(KBReadsUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtil
 
             print(f"Downloading genes for {genome_id}...")
             try:
-                # Load genome object using KBGenomeUtils
-                self.load_kbase_gene_container(genome_ref, localname=genome_id)
-                features = self.object_to_features(genome_id)
+                # Load genome object into object_hash
+                obj = self.load_kbase_gene_container(genome_ref, localname=genome_id)
+                genome_data = obj["data"]
+                obj_type = (
+                    obj.get("info", [None] * 3)[2]
+                    if "info" in obj
+                    else "KBaseGenomes.Genome"
+                )
 
+                # Use KBAnnotationUtils.process_object to standardise
+                # features, aliases, and ontology terms in self.ftrhash
+                self.process_object({"object": genome_data, "type": obj_type})
+
+                # Discover all cleaned ontology types across this genome
+                all_ontology_types = set()
+                for ftr in self.ftrhash.values():
+                    for raw_tag in ftr.get("ontology_terms", {}):
+                        all_ontology_types.add(self.clean_tag(raw_tag))
+                sorted_ont_types = sorted(all_ontology_types)
+
+                # Build rows
                 gene_rows = []
-                for ftr in features:
-                    aliases = self.ftr_to_aliases(genome_id, ftr.get("id", ""))
-                    alias_str = ";".join(f"{v}:{k}" for k, v in aliases.items()) if aliases else ""
+                for ftr_id, ftr in self.ftrhash.items():
+                    # Aliases (upgrade_feature already normalised to [[src, val], ...])
+                    aliases = ftr.get("aliases", [])
+                    alias_str = (
+                        ";".join(f"{a[0]}:{a[1]}" for a in aliases if len(a) >= 2)
+                        if aliases else ""
+                    )
 
-                    # Extract location information
+                    # Location
                     locations = ftr.get("location", [])
                     contig = locations[0][0] if locations else ""
                     start = locations[0][1] if locations else 0
@@ -266,24 +334,52 @@ class KBDataLakeUtils(KBReadsUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtil
                     length = locations[0][3] if locations else 0
                     end = start + length if strand == "+" else start - length
 
-                    gene_rows.append({
+                    # Functions (upgrade_feature converted 'function' → 'functions' list)
+                    functions = ftr.get("functions", [])
+                    if isinstance(functions, list):
+                        functions_str = ";".join(functions)
+                    else:
+                        functions_str = str(functions) if functions else ""
+
+                    row_data = {
                         'gene_id': ftr.get('id', ''),
                         'aliases': alias_str,
                         'contig': contig,
                         'start': start,
                         'end': end,
                         'strand': strand,
-                        'type': ftr.get('type', 'Unknown'),
-                        'functions': ftr.get('function', ftr.get('functions', [''])[0] if ftr.get('functions') else ''),
+                        'type': self.ftrtypes.get(ftr_id, 'Unknown'),
+                        'functions': functions_str,
                         'protein_translation': ftr.get('protein_translation', ''),
                         'dna_sequence': ftr.get('dna_sequence', ''),
-                        'ontology_terms': json.dumps(ftr.get('ontology_terms', {})),
-                    })
+                    }
+
+                    # Add a column per ontology type
+                    for ont_type in sorted_ont_types:
+                        terms_list = []
+                        for raw_tag, terms_dict in ftr.get("ontology_terms", {}).items():
+                            if self.clean_tag(raw_tag) != ont_type:
+                                continue
+                            for raw_term in terms_dict:
+                                cleaned = self.clean_term(raw_term, raw_tag, ont_type)
+                                name = self.get_term_name(ont_type, cleaned)
+                                rxns = self.translate_term_to_modelseed(cleaned)
+                                entry = f"{cleaned}:{name}"
+                                if rxns:
+                                    entry += "|" + ",".join(rxns)
+                                terms_list.append(entry)
+                        row_data[f"Annotation:{ont_type}"] = (
+                            ";".join(terms_list) if terms_list else ""
+                        )
+
+                    gene_rows.append(row_data)
 
                 gene_df = pd.DataFrame(gene_rows)
                 output_path = os.path.join(genomes_dir, f"{genome_id}.tsv")
                 gene_df.to_csv(output_path, sep='\t', index=False)
-                print(f"  Saved {len(gene_rows)} features for {genome_id}")
+                ont_msg = ", ".join(sorted_ont_types) if sorted_ont_types else "none"
+                print(f"  Saved {len(gene_rows)} features for {genome_id} "
+                      f"(ontologies: {ont_msg})")
 
             except Exception as e:
                 print(f"  Warning: Failed to download genes for {genome_id}: {e}")
@@ -398,6 +494,12 @@ class KBDataLakeUtils(KBReadsUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtil
             print(f"\n{len(errors)} models failed to build:")
             for gid, err in errors:
                 print(f"  {gid}: {err}")
+
+    def pipeline_run_ontology_term_kberdl_query(self):
+        """
+        Pipeline step for running ontology term query against KBase BERDL.
+        """
+        #TODO: Jose should fill in his code for ontology term query using API here using genome TSV files as input
 
     def pipeline_save_annotated_genomes(self):
         """

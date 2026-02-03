@@ -4,7 +4,7 @@
         "chenry"
     ],
     "contact": "chenry@anl.gov",
-    "categories": ["active"],
+    "categories": ["active", "BERDL"],
     "widgets": {
         "output": "no-display",
         "input": null

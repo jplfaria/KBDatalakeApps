@@ -3,6 +3,18 @@
   "type" : "sdk",
   "version_tag" : "release"
 }, {
+  "module_name" : "kb_bakta",
+  "type" : "sdk",
+  "version_tag" : "release"
+}, {
+  "module_name" : "kb_kofam",
+  "type" : "sdk",
+  "version_tag" : "release"
+}, {
+  "module_name" : "kb_psortb",
+  "type" : "sdk",
+  "version_tag" : "release"
+}, {
   "module_name" : "KBaseReport",
   "type" : "sdk",
   "version_tag" : "release"
