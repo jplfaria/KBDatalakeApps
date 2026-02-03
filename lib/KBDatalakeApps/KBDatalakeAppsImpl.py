@@ -113,6 +113,9 @@ Author: chenry
             _params = dict(params)
             _params['_ctx'] = ctx
             _params['_config'] = self.config
+
+            print('to create a copy for debug:', _params)
+
             fh.write(json.dumps(_params))
 
         print(os.environ)
