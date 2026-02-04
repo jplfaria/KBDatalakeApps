@@ -253,7 +253,7 @@ Author: chenry
             }],
         }
 
-        self.kbase_api.save_object('fake_output',
+        saved_object_info = self.kbase_api.save_object('fake_output',
                                    params['workspace_name'],
                                    'KBaseFBA.GenomeDataLakeTables',
                                    output_object,
@@ -262,6 +262,8 @@ Author: chenry
                                        'note': 'all fields are fake values for testing'
                                    }
         )
+
+        print(saved_object_info)
 
         # Create report with results
         report_client = KBaseReport(self.callback_url)
