@@ -2,8 +2,9 @@
 
 class BERDLPangenome:
 
-    def __init__(self, pg):
-        self.pg = pg  # pan-genome query api
+    def __init__(self, query_pg, query_g):
+        self.pg = query_pg  # pan-genome query api
+        self.query_g = query_g
         pass
 
     def run(self, genome_id):
@@ -20,6 +21,10 @@ class BERDLPangenome:
             d_cluster_to_genes[v].add(k)
 
         # get clade member faa and fna
+        members = {}
+        for row in clade_members.rows(named=True):
+            member_id = row['genome_id']
+            members[member_id] = self.query_g.get_genome_features(member_id)
 
         # build master protein user_genome + pangenome
 

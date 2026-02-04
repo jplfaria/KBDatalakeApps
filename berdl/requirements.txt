@@ -3,4 +3,3 @@ polars==1.37.1
 requests==2.32.5
 ModelSEEDpy @ git+https://github.com/ModelSEED/ModelSEEDpy.git@d109a897ac4b22c8ae2a78c963ad6ce01af9ce6a
 cobrakbase @ git+https://github.com/Fxe/cobrakbase.git@717c036e3f7ae9001afd9611c0639b35a2d78ee4
-berdl-genomes @ file:///kb/module/berdl

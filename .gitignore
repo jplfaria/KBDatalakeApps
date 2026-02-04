@@ -2,6 +2,7 @@ lib/KBDatalakeApps/KBDatalakeAppsImpl.py.bak*
 test/test_env
 jupyterhub_cookie_secret
 jupyterhub.sqlite
+berdl/%SystemDrive%
 
 # KBase SDK
 test_local/
