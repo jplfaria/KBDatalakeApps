@@ -1,11 +1,13 @@
+from modelseedpy.core.msgenome import MSFeature, MSGenome
+from berdl.pangenome.paths_pangenome import PathsPangenome
 
 
 class BERDLPangenome:
 
-    def __init__(self, query_pg, query_g):
+    def __init__(self, query_pg, query_g, paths: PathsPangenome):
         self.pg = query_pg  # pan-genome query api
         self.query_g = query_g
-        pass
+        self.paths = paths.ensure()
 
     def run(self, genome_id):
         clade_id = self.pg.get_member_representative(genome_id)
@@ -28,4 +30,33 @@ class BERDLPangenome:
 
         # build master protein user_genome + pangenome
 
-        pass
+        u_proteins = {}
+        for k, g in members.items():
+            print(k, len(g.features))
+            for feature in g.features:
+                _parts = feature.description.split(' ')
+                h = _parts[4]
+                u_proteins[h] = MSFeature(h, feature.seq)
+
+        genome_master_faa = MSGenome()
+        genome_master_faa.add_features(list(u_proteins.values()))
+        genome_master_faa.to_fasta(str(self.paths.out_master_faa_pangenome_members))
+
+        #  collect user genome and add to u_proteins
+        
+
+        #  collect phenotype and fitness
+        genome_master_faa_fitness = MSGenome.from_fasta(str(self.paths.ref_master_faa_protein_fitness))
+        for feature in genome_master_faa_fitness:
+            if feature.id not in u_proteins:
+                u_proteins[feature.id] = MSFeature(feature.id, feature.seq)
+        genome_master_faa_phenotype = MSGenome.from_fasta(str(self.paths.ref_master_faa_protein_phenotype))
+        for feature in genome_master_faa_phenotype:
+            if feature.id not in u_proteins:
+                u_proteins[feature.id] = MSFeature(feature.id, feature.seq)
+
+        # rebuild master faa genome with proteins from
+        #  user / pangenome / fitness / phenotypes
+        genome_master_faa = MSGenome()
+        genome_master_faa.add_features(list(u_proteins.values()))
+        genome_master_faa.to_fasta(str(self.paths.out_master_faa))

@@ -1,6 +1,7 @@
 import polars as pl
 from pathlib import Path
 from berdl.query.query_genome import QueryGenomeABC
+from modelseedpy.core.msgenome import MSFeature, MSGenome
 
 
 class QueryGenomeLocal(QueryGenomeABC):
@@ -58,7 +59,6 @@ class QueryGenomeLocal(QueryGenomeABC):
 
             d_names = {row['entity_id']: row['name'] for row in df_names.rows(named=True)}
 
-            from modelseedpy.core.msgenome import MSFeature, MSGenome
             features = {}
             for row in df_features.rows(named=True):
                 start = row['start']
