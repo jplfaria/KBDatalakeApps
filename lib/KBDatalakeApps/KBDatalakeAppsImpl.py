@@ -186,7 +186,7 @@ Author: chenry
 
         path_pangenome = Path(self.shared_folder) / "pangenome"
         for folder_pangenome in os.listdir(str(path_pangenome)):
-            if os.path.isdir(f'{path_pangenome}/folder_pangenome'):
+            if os.path.isdir(f'{path_pangenome}/{folder_pangenome}'):
                 print(f'Found pangenome folder: {folder_pangenome}')
                 # run pangenome pipeline for - folder_pangenome
                 self.run_pangenome_pipeline(input_params.resolve(), folder_pangenome)
