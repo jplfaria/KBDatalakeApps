@@ -149,7 +149,7 @@ Author: chenry
         if os.path.exists('/data') and os.path.exists('/data/reference_data'):
             print(os.listdir('/data/reference_data'))
 
-        self.run_genome_pipeline(input_params.resolve())
+
 
         #print('BERDL Token')
         #print(self.get_berdl_token())
@@ -162,19 +162,15 @@ Author: chenry
         suffix = params.get('suffix', ctx['token'])
         save_models = params.get('save_models', 0)
 
-        for ref in params['input_refs']:
-            kbase_input_object = self.kbase_api.get_from_ws(ref)
-            kbase_input_object_type = kbase_input_object.info.type
-            print('input_object is:', kbase_input_object_type)
-            if kbase_input_object_type == 'wololo':
-                pass
-            elif kbase_input_object_type == 'wololo2':
-                pass
-            else:
-                pass
-                #raise ValueError('')
+        self.run_genome_pipeline(input_params.resolve())
 
-
+        path_user_genome = Path(self.shared_folder) / "genome"
+        for filename_faa in os.listdir(str(path_user_genome)):
+            print(filename_faa)
+            if filename_faa.endswith('.faa'):
+                from modelseedpy import MSGenome
+                genome = MSGenome.from_fasta(str(path_user_genome / filename_faa))
+                self.logger.info(f"run annotation for {genome}")
 
         # Create KBaseFBA.GenomeDataLakeTables
 

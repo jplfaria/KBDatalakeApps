@@ -1,10 +1,14 @@
 import os
 import argparse
+import logging
 from pathlib import Path
 import json
 from berdl.genome_paths import GenomePaths
 from berdl.prep_genome_set import BERDLPreGenome
 from cobrakbase import KBaseAPI
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def main(input_params):
@@ -31,7 +35,19 @@ def main(input_params):
 
     paths = GenomePaths(root=Path(input_params['_config']['scratch']).resolve())
     berdl_prep_genomes = BERDLPreGenome(kbase, paths)
-    user_to_clade, ani_clade, df_ani_fitness, df_ani_phenotype = berdl_prep_genomes.run(genomes)
+    user_genome_files, user_to_clade, ani_clades, ani_fitness, df_ani_phenotype = berdl_prep_genomes.run(genomes)
+
+    clade_to_user_genomes = {}
+    for u, c in user_to_clade.items():
+        if c not in clade_to_user_genomes:
+            clade_to_user_genomes[c] = set()
+        clade_to_user_genomes[c].add(u)
+
+    for clade in clade_to_user_genomes:
+        p = paths.pangenome_dir / clade
+        p.mkdir(parents=True, exist_ok=True)
+        LOGGER.info(f"Create pangenome path: {p}")
+        pass
 
 
 if __name__ == "__main__":

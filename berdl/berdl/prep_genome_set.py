@@ -121,8 +121,47 @@ class BERDLPreGenome:
         def r_transform(s):
             return self.t_ncbi_to_gtdb_id(s.split('/')[-1].rsplit('_', 1)[0])
 
-        ani_clades = self.ani_transform(df, q_transform, r_transform)
-        return ani_clades
+        t = self.ani_transform(df, q_transform, r_transform)
+        return t
+
+    def ani_translate_fitness(self, df, assembly_to_user_id):
+        def q_transform(s):
+            return assembly_to_user_id[s.split('/')[-1]]
+        t = self.ani_transform(df, q_transform, lambda x: x.split('/')[-1])
+        return t
+
+    def ani_translate_phenotype(self, df, assembly_to_user_id):
+        def q_transform(s):
+            return assembly_to_user_id[s.split('/')[-1]]
+
+        import pandas as pd
+        df_anl_ecoli = pd.read_csv('/data/reference_data/meta_phenotype_ecoli.tsv', sep='\t')
+        df_pmi = pd.read_csv('/data/reference_data/meta_phenotype_pmi.tsv', sep='\t')
+        df_leaf = pd.read_csv('/data/reference_data/meta_phenotype_leaf.tsv', sep='\t')
+        contig_h_to_genome_id = {}
+        for row_id, row in df_anl_ecoli.iterrows():
+            if row['h'] not in contig_h_to_genome_id:
+                contig_h_to_genome_id[row['h']] = row['genome_id']
+            else:
+                raise ValueError('dup')
+        for row_id, row in df_pmi.iterrows():
+            h = row['hash_contigset']
+            if h not in contig_h_to_genome_id:
+                contig_h_to_genome_id[h] = row['genome_id']
+            else:
+                raise ValueError('dup')
+        for row_id, row in df_leaf.iterrows():
+            h = row['hash_contigset']
+            if h not in contig_h_to_genome_id:
+                contig_h_to_genome_id[h] = row['genome_id']
+            else:
+                raise ValueError('dup')
+
+        def r_transform_phenotypes(s):
+            return contig_h_to_genome_id[s.split('/')[-1][:-4]]
+
+        t = self.ani_transform(df, q_transform, r_transform_phenotypes)
+        return t
 
     def run(self, genomes: list):
         user_genome_files = self.pre_user_genomes(genomes)
@@ -152,4 +191,6 @@ class BERDLPreGenome:
         with open(self.paths.json_user_to_clade, 'w') as fh:
             fh.write(json.dumps(user_to_clade))
 
-        return user_to_clade, ani_clades, df_ani_fitness, df_ani_phenotype
+        ani_fitness = self.ani_translate_fitness(df_ani_fitness, assembly_to_user_id)
+
+        return user_genome_files, user_to_clade, ani_clades, ani_fitness, df_ani_phenotype
