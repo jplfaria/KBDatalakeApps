@@ -99,9 +99,9 @@ Author: chenry
         # Initialize KBUtilLib utilities
         self.dfu = DataFileUtil(self.callback_url)
         self.kbase_api = KBaseAPI(os.environ['KB_AUTH_TOKEN'], config=config)
-        self.kb_bakta = kb_bakta(self.callback_url, service_ver='beta')
-        self.kb_psortb = kb_psortb(self.callback_url, service_ver='beta')
-        self.kb_kofam = kb_kofam(self.callback_url, service_ver='beta')
+        self.kb_bakta = kb_bakta(self.callback_url, service_ver='dev')
+        self.kb_psortb = kb_psortb(self.callback_url, service_ver='dev')
+        self.kb_kofam = kb_kofam(self.callback_url, service_ver='dev')
         #self.utils = DatalakeAppUtils(callback_url=self.callback_url)
         #END_CONSTRUCTOR
         pass
@@ -166,18 +166,42 @@ Author: chenry
         self.run_genome_pipeline(input_params.resolve())
 
         path_user_genome = Path(self.shared_folder) / "genome"
+        t_start_time = time.perf_counter()
         for filename_faa in os.listdir(str(path_user_genome)):
             print(filename_faa)
             if filename_faa.endswith('.faa'):
                 genome = MSGenome.from_fasta(str(path_user_genome / filename_faa))
                 proteins = {f.id:f.seq for f in genome.features if f.seq}
                 print(filename_faa, len(proteins))
+
                 self.logger.info(f"run annotation for {genome}")
                 start_time = time.perf_counter()
-                raw_annotation_kofam = self.kb_kofam.annotate_proteins(proteins)
+                result = self.kb_kofam.annotate_proteins(proteins)
                 end_time = time.perf_counter()
                 print(f"Execution time: {end_time - start_time} seconds")
-                print(raw_annotation_kofam)
+                print(type(result), len(result))
+
+                self.logger.info(f"run annotation for {genome}")
+                start_time = time.perf_counter()
+                result = self.kb_bakta.annotate_proteins(proteins)
+                end_time = time.perf_counter()
+                print(f"Execution time: {end_time - start_time} seconds")
+                print(type(result), len(result))
+
+                self.logger.info(f"run annotation for {genome}")
+                start_time = time.perf_counter()
+                result = self.kb_psortb.annotate_proteins(proteins, "-n")
+                end_time = time.perf_counter()
+                print(f"Execution time: {end_time - start_time} seconds")
+                print(type(result), len(result))
+
+        t_end_time = time.perf_counter()
+        print(f"Total Execution time annotation: {t_end_time - t_start_time} seconds")
+
+        path_pangenome = Path(self.shared_folder) / "pangenome"
+        for folder_pangenome in os.listdir(str(path_pangenome)):
+            print(f'Found pangenome folder: {folder_pangenome}')
+            # run pangenome pipeline for - folder_pangenome
 
         # Create KBaseFBA.GenomeDataLakeTables
 
