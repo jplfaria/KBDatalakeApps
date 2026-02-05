@@ -211,6 +211,8 @@ Author: chenry
                     end_time = time.perf_counter()
                     print(f"Execution time: {end_time - start_time} seconds")
                     print(f'received results of type {type(result)} and size {len(result)}')
+
+                    print(result)
                 except Exception as ex:
                     print(f'nope {ex}')
 
@@ -249,7 +251,9 @@ Author: chenry
                 'pangenome_taxonomy': 'alien',
                 'user_genomes': [],
                 'datalake_genomes': [],
-                'sqllite_tables_handle_ref': 'KBH_248173'
+                'sqllite_tables_handle_ref': 'KBH_248118'
+                # Chris sqlite KBH_248173
+                # random e. coli? assembly KBH_248118s
             }],
         }
 
