@@ -50,6 +50,22 @@ parameters:
             process to your workspace. Leave unchecked to only generate the tables
             without saving intermediate models.
 
+    skip_annotation:
+        ui-name: |
+            Skip Annotation
+        short-hint: |
+            skip skip skip
+        long-hint: |
+            x
+
+    skip_pangenome:
+        ui-name: |
+            Skip Pangenome
+        short-hint: |
+            skip skip skip
+        long-hint: |
+            x
+
 description: |
     <p>This app builds datalake tables from Genome or GenomeSet objects in your
     workspace. The tables can be used for downstream analysis and querying.</p>

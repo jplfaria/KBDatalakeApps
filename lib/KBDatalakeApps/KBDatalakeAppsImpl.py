@@ -223,7 +223,7 @@ Author: chenry
         print('annotate_protein_params:', annotate_protein_params)
 
         result = rast_client.annotate_proteins(annotate_protein_params)
-
+        print('rast annotation param', result)
         functions_list = result.get('functions', [])
         records = []
         for id, functions in zip(ids, functions_list):
@@ -342,7 +342,7 @@ Author: chenry
             if os.path.isdir(f'{path_pangenome}/{folder_pangenome}'):
                 print(f'Found pangenome folder: {folder_pangenome}')
                 # run pangenome pipeline for - folder_pangenome
-                self.run_pangenome_pipeline(input_params.resolve(), folder_pangenome)
+                #self.run_pangenome_pipeline(input_params.resolve(), folder_pangenome)
 
         path_user_genome = Path(self.shared_folder) / "genome"
         t_start_time = time.perf_counter()
