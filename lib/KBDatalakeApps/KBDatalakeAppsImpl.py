@@ -6,7 +6,6 @@ import os
 import uuid
 from pathlib import Path
 import shutil
-import json
 import subprocess
 import time
 import polars as pl
@@ -24,6 +23,7 @@ from modelseedpy.core.msgenome import MSGenome, MSFeature
 from cobrakbase import KBaseAPI
 from installed_clients.baseclient import ServerError
 from annotation.annotation import test_annotation, run_rast, run_kofam
+from KBDatalakeApps.KBDatalakeFunctions import run_phenotype_simulation,run_model_reconstruction,run_user_genome_to_tsv,get_util_instance
 
 # Import KBUtilLib utilities for common functionality
 #from kbutillib import KBWSUtils, KBCallbackUtils, SharedEnvUtils
@@ -197,10 +197,11 @@ Author: chenry
         self.kb_bakta = kb_bakta(self.callback_url, service_ver='beta')
         self.kb_psortb = kb_psortb(self.callback_url, service_ver='beta')
         self.kb_kofam = kb_kofam(self.callback_url, service_ver='beta')
+        self.kb_version = "appdev"
+        self.util = get_util_instance(self.kb_version)
 
         print('polars thread pool', pl.thread_pool_size())
         self.rast_client = RAST_SDK(self.callback_url, service_ver='beta')
-        #self.utils = DatalakeAppUtils(callback_url=self.callback_url)
         #END_CONSTRUCTOR
         pass
 
@@ -230,6 +231,8 @@ Author: chenry
         self.logger.info(f"Building genome datalake tables with params: {params}")
         skip_annotation = params['skip_annotation'] == 1
         skip_pangenome = params['skip_pangenome'] == 1
+        skip_genome_pipeline = params['skip_genome_pipeline'] == 1
+        skip_modeling_pipeline = params['skip_modeling_pipeline'] == 1
 
         input_params = Path(self.shared_folder) / 'input_params.json'
         print(str(input_params.resolve()))
@@ -285,7 +288,10 @@ Author: chenry
         suffix = params.get('suffix', ctx['token'])
         save_models = params.get('save_models', 0)
 
-        self.run_genome_pipeline(input_params.resolve())
+        if not skip_genome_pipeline:
+            self.run_genome_pipeline(input_params.resolve())
+        else:
+            print('skip genome pipeline')
 
         path_pangenome = Path(self.shared_folder) / "pangenome"
         for folder_pangenome in os.listdir(str(path_pangenome)):
@@ -341,6 +347,48 @@ Author: chenry
                     except Exception as ex:
                         print(f'nope {ex}')
                     """
+
+        if not skip_modeling_pipeline:
+            for input_ref in input_refs:
+                info = self.util.get_object_info(input_ref)
+                print(f'info: {info}')
+                genome_tsv_path = path_user_genome / f'{info["name"]}_genome.tsv'
+                run_user_genome_to_tsv(input_ref, genome_tsv_path)
+
+                # Print head of genome TSV for testing
+                print(f"=== Head of genome TSV: {genome_tsv_path} ===")
+                with open(genome_tsv_path, 'r') as f:
+                    for i, line in enumerate(f):
+                        if i >= 5:
+                            break
+                        print(line.rstrip())
+                print("=" * 50)
+
+                # Run model reconstruction
+                model_output_path = path_user_genome / f'{info["name"]}_model'
+                run_model_reconstruction(str(genome_tsv_path), str(model_output_path))
+
+                # Print head of model output for testing
+                model_data_file = str(model_output_path) + "_data.json"
+                print(f"=== Head of model data: {model_data_file} ===")
+                with open(model_data_file, 'r') as f:
+                    content = f.read(2000)
+                    print(content[:2000])
+                print("=" * 50)
+
+                # Run phenotype simulation
+                phenotype_output_path = path_user_genome / f'{info["name"]}_phenotypes.json'
+                cobra_model_path = str(model_output_path) + "_cobra.json"
+                run_phenotype_simulation(cobra_model_path, str(phenotype_output_path))
+
+                # Print head of phenotype output for testing
+                print(f"=== Head of phenotype results: {phenotype_output_path} ===")
+                with open(phenotype_output_path, 'r') as f:
+                    content = f.read(2000)
+                    print(content[:2000])
+                print("=" * 50)
+        else:
+            print('skip modeling pipeline')
 
         t_end_time = time.perf_counter()
         print(f"Total Execution time annotation: {t_end_time - t_start_time} seconds")

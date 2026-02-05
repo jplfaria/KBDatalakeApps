@@ -10,13 +10,26 @@ from os import path
 sys.path = ["/deps/KBUtilLib/src","/deps/cobrakbase","/deps/ModelSEEDpy","/deps/cb_annotation_ontology_api"] + sys.path
 
 # Import utilities with error handling
-from kbutillib import KBAnnotationUtils, MSReconstructionUtils,MSFBAUtils,MSBiochemUtils
+from kbutillib import KBAnnotationUtils, KBWSUtils, MSReconstructionUtils,MSFBAUtils,MSBiochemUtils
+from modelseedpy.core.msgenome import MSGenome, MSFeature
 
 import pandas as pd
 import cobra
 from modelseedpy import AnnotationOntology, MSPackageManager, MSTemplateBuilder, MSMedia, MSModelUtil, MSBuilder, MSATPCorrection, MSGapfill, MSGrowthPhenotype, MSGrowthPhenotypes, ModelSEEDBiochem, MSExpression
 
-@staticmethod
+
+def get_util_instance(kbversion):
+    class WorkerUtil(KBWSUtils):
+            def __init__(self):
+                super().__init__(
+                    name="WorkerUtil",
+                    kb_version=kbversion
+                )
+
+    worker_util = WorkerUtil()
+
+    return worker_util
+
 def run_phenotype_simulation(model_filename,output_filename,max_phenotypes=5):
     """
     Worker function for parallel phenotype simulation.
@@ -110,13 +123,15 @@ def run_phenotype_simulation(model_filename,output_filename,max_phenotypes=5):
         #reaction_scores=reaction_scores
     )
 
-    os.makedirs(phenotypes_dir, exist_ok=True)
-    with open(phenotypes_dir+"/"+genome_id+".json", "w") as f:
+    output_dir = os.path.dirname(output_filename)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    with open(output_filename, "w") as f:
         json.dump(results, f, indent=4, skipkeys=True)
 
     return {"success": True, "genome_id": genome_id}
 
-def genome_to_model(input_filename,output_filename):
+def run_model_reconstruction(input_filename,output_filename):
     worker_util = MSReconstructionUtils()
 
     # Clear MSModelUtil cache for this process
@@ -168,7 +183,7 @@ def genome_to_model(input_filename,output_filename):
     current_output, mdlutl = worker_util.build_metabolic_model(
         genome=genome,
         genome_classifier=genome_classifier,
-        model_id=safe_genome_id,
+        model_id=genome_id,
         model_name=genome_id,
         gs_template="auto",
         atp_safe=True,

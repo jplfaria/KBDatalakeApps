@@ -18,12 +18,12 @@ sys.path = [base_dir+"/KBUtilLib/src",base_dir+"/cobrakbase",base_dir+"/ModelSEE
 sys.path.insert(0, os.path.join(base_dir, "KBDatalakeApps", "lib"))
 
 # Import utilities with error handling
-from kbutillib import NotebookUtils, SharedEnvUtils
+from kbutillib import NotebookUtils, SharedEnvUtils, KBWSUtils
 
 import pandas as pd
 
 
-class NotebookUtil(NotebookUtils, SharedEnvUtils):
+class NotebookUtil(NotebookUtils, KBWSUtils):
     """Test harness for the KBDatalakeApps pipeline.
 
     This utility reads token and config from the standard file locations
@@ -39,6 +39,7 @@ class NotebookUtil(NotebookUtils, SharedEnvUtils):
             user="chenry",
             retries=5,
             proxy_port=None,
+            kb_version="appdev",
             **kwargs
         )
 
