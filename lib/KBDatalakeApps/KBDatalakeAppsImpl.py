@@ -10,6 +10,8 @@ import json
 import subprocess
 import time
 import polars as pl
+import cobra
+import pandas as pd
 
 from installed_clients.KBaseReportClient import KBaseReport
 from installed_clients.DataFileUtilClient import DataFileUtil
@@ -17,7 +19,7 @@ from installed_clients.RAST_SDKClient import RAST_SDK
 from installed_clients.kb_baktaClient import kb_bakta
 from installed_clients.kb_psortbClient import kb_psortb
 from installed_clients.kb_kofamClient import kb_kofam
-from modelseedpy import MSGenome
+from modelseedpy import MSGenome, MSFeature, MSModelUtil
 from cobrakbase import KBaseAPI
 
 # Import KBUtilLib utilities for common functionality
@@ -103,97 +105,6 @@ Author: chenry
             raise RuntimeError(
                 f"Genome pipeline failed with exit code {ret}"
             )
-
-    @staticmethod
-    def run_user_genome_to_tsv(genome_ref,output_filename):
-        # # Load genome object into object_hash
-        # obj = self.load_kbase_gene_container(genome_ref, localname=genome_id)
-        # genome_data = obj["data"]
-        # obj_type = (
-        #     obj.get("info", [None] * 3)[2]
-        #     if "info" in obj
-        #     else "KBaseGenomes.Genome"
-        # )
-
-        # # Use KBAnnotationUtils.process_object to standardise
-        # # features, aliases, and ontology terms in self.ftrhash
-        # self.process_object({"object": genome_data, "type": obj_type})
-
-        # # Discover all cleaned ontology types across this genome
-        # all_ontology_types = set()
-        # for ftr in self.ftrhash.values():
-        #     for raw_tag in ftr.get("ontology_terms", {}):
-        #         all_ontology_types.add(self.clean_tag(raw_tag))
-        # sorted_ont_types = sorted(all_ontology_types)
-
-        # # Build rows – only genes and noncoding features
-        # gene_rows = []
-        # for ftr_id, ftr in self.ftrhash.items():
-        #     ftr_type = self.ftrtypes.get(ftr_id, 'Unknown')
-        #     if ftr_type not in ('gene', 'noncoding'):
-        #         continue
-        #     # Aliases (upgrade_feature already normalised to [[src, val], ...])
-        #     aliases = ftr.get("aliases", [])
-        #     alias_str = (
-        #         ";".join(f"{a[0]}:{a[1]}" for a in aliases if len(a) >= 2)
-        #         if aliases else ""
-        #     )
-
-        #     # Location
-        #     locations = ftr.get("location", [])
-        #     contig = locations[0][0] if locations else ""
-        #     start = locations[0][1] if locations else 0
-        #     strand = locations[0][2] if locations else "+"
-        #     length = locations[0][3] if locations else 0
-        #     end = start + length if strand == "+" else start - length
-
-        #     # Functions (upgrade_feature converted 'function' → 'functions' list)
-        #     functions = ftr.get("functions", [])
-        #     if isinstance(functions, list):
-        #         functions_str = ";".join(functions)
-        #     else:
-        #         functions_str = str(functions) if functions else ""
-
-        #     row_data = {
-        #         'gene_id': ftr.get('id', ''),
-        #         'aliases': alias_str,
-        #         'contig': contig,
-        #         'start': start,
-        #         'end': end,
-        #         'strand': strand,
-        #         'type': ftr_type,
-        #         'functions': functions_str,
-        #         'protein_translation': ftr.get('protein_translation', ''),
-        #         'dna_sequence': ftr.get('dna_sequence', ''),
-        #     }
-
-        #     # Add a column per ontology type
-        #     for ont_type in sorted_ont_types:
-        #         terms_list = []
-        #         for raw_tag, terms_dict in ftr.get("ontology_terms", {}).items():
-        #             if self.clean_tag(raw_tag) != ont_type:
-        #                 continue
-        #             for raw_term in terms_dict:
-        #                 cleaned = self.clean_term(raw_term, raw_tag, ont_type)
-        #                 name = self.get_term_name(ont_type, cleaned)
-        #                 rxns = self.translate_term_to_modelseed(cleaned)
-        #                 entry = f"{cleaned}:{name}"
-        #                 if rxns:
-        #                     entry += "|" + ",".join(rxns)
-        #                 terms_list.append(entry)
-        #         row_data[f"Annotation:{ont_type}"] = (
-        #             ";".join(terms_list) if terms_list else ""
-        #         )
-
-        #     gene_rows.append(row_data)
-
-        # gene_df = pd.DataFrame(gene_rows)
-        # output_path = os.path.join(genomes_dir, f"{genome_id}.tsv")
-        # gene_df.to_csv(output_path, sep='\t', index=False)
-        # ont_msg = ", ".join(sorted_ont_types) if sorted_ont_types else "none"
-        # print(f"  Saved {len(gene_rows)} features for {genome_id} "
-        #         f"(ontologies: {ont_msg})")
-        pass
 
     @staticmethod
     def run_RAST_annotation(input_filepath,output_filename):
