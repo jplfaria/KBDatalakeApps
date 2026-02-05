@@ -1,1 +1,3 @@
+ModelSEEDpy @ git+https://github.com/cshenry/ModelSEEDpy.git
+cobrakbase @ git+https://github.com/cshenry/cobrakbase.git@68444e46fe3b68482da80798642461af2605e349
 polars==1.37.1
