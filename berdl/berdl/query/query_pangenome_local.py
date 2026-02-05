@@ -1,4 +1,4 @@
-from query_pangenome import QueryPangenomeABC
+from .query_pangenome import QueryPangenomeABC
 import os
 from pathlib import Path
 import polars as pl
