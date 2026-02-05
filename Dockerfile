@@ -80,12 +80,28 @@ RUN chmod -R a+rw /kb/module
 RUN /root/.local/bin/uv pip install --python /opt/env/berdl_genomes --no-progress -r /kb/module/berdl/requirements.txt
 
 # @chenry
+RUN pip install --upgrade pip
+RUN pip install chemw==0.3.2
+RUN pip install pandas
+RUN apt-get update
+RUN apt-get install -y gcc
+RUN rm -rf /miniconda/lib/python3.6/site-packages/numpy
+RUN rm -rf /miniconda/lib/python3.6/site-packages/ruamel*
+RUN pip install --upgrade pip
+RUN pip install "numpy<1.24"
+RUN pip install cobra
+RUN pip install networkx
+RUN pip install deepdiff
+RUN pip install h5py
+
 RUN echo '0' >/dev/null && pip install --use-deprecated=legacy-resolver git+https://github.com/cshenry/ModelSEEDpy.git
 RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/cobrakbase.git && \
     cd cobrakbase && git checkout 68444e46fe3b68482da80798642461af2605e349
 RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/KBUtilLib.git
+RUN echo '0' >/dev/null && cd /deps && \
+    git clone https://github.com/kbaseapps/cb_annotation_ontology_api.git
 
 WORKDIR /kb/module
 
