@@ -140,7 +140,7 @@ def run_model_reconstruction(input_filename,output_filename):
 
     # Create safe model ID
     genome_id = os.path.splitext(os.path.basename(input_filename))[0]
-
+    print(f'genome_id: {genome_id}')
     # Load features from genome TSV
     gene_df = pd.read_csv(input_filename, sep='\t')
 
@@ -149,31 +149,58 @@ def run_model_reconstruction(input_filename,output_filename):
     genome.id = genome_id
     genome.scientific_name = genome_id
 
+    # Detect TSV format based on columns present
+    columns = set(gene_df.columns)
+    is_simple_format = 'id' in columns and 'functions' in columns and 'protein_translation' not in columns
+    print(f'TSV format detected: {"simple (id, function)" if is_simple_format else "full genome TSV"}')
+
     ms_features = []
     for _, gene in gene_df.iterrows():
-        protein = gene.get('protein_translation', '')
-        gene_id = gene.get('gene_id', '')
-        if pd.notna(protein) and protein:
-            feature = MSFeature(gene_id, str(protein))
-            # Parse Annotation:SSO column
-            # Format: SSO:nnnnn:description|rxn1,rxn2;SSO:mmmmm:desc2|rxn3
-            sso_col = gene.get('functions', '')
-            if pd.notna(sso_col) and sso_col:
-                for entry in str(sso_col).split(';'):
-                    entry = entry.strip()
-                    if not entry:
-                        continue
-                    term_part = entry.split('|')[0]
-                    parts = term_part.split(':')
-                    if len(parts) >= 2 and parts[0] == 'SSO':
-                        sso_id = parts[0] + ':' + parts[1]
-                        feature.add_ontology_term('SSO', sso_id)
-                        # Extract description for classifier
-                        if len(parts) >= 3:
-                            description = ':'.join(parts[2:])
-                            if description:
-                                feature.add_ontology_term('RAST', description)
-            ms_features.append(feature)
+        if is_simple_format:
+            # Simple format: columns are 'id' and 'function'
+            # 'function' is pipe-delimited list of RAST descriptions
+            gene_id_val = gene.get('id', '')
+            if pd.notna(gene_id_val) and gene_id_val:
+                feature = MSFeature(str(gene_id_val), '')  # No protein sequence in simple format
+                func_col = gene.get('function', '')
+                if pd.notna(func_col) and func_col:
+                    # Split on pipe delimiter for multiple RAST functions
+                    for func_desc in str(func_col).split('|'):
+                        func_desc = func_desc.strip()
+                        if func_desc:
+                            feature.add_ontology_term('RAST', func_desc)
+                ms_features.append(feature)
+        else:
+            # Full genome TSV format
+            protein = gene.get('protein_translation', '')
+            gene_id_val = gene.get('gene_id', '')
+            if pd.notna(protein) and protein:
+                feature = MSFeature(str(gene_id_val), str(protein))
+
+                # Parse plain functions column for RAST descriptions
+                # Format: "Threonine synthase (EC 4.2.3.1)" or "Func1;Func2"
+                func_col = gene.get('functions', '')
+                if pd.notna(func_col) and func_col:
+                    for func_desc in str(func_col).split(';'):
+                        func_desc = func_desc.strip()
+                        if func_desc:
+                            feature.add_ontology_term('RAST', func_desc)
+
+                # Parse Annotation:SSO column for SSO IDs
+                # Format: SSO:nnnnn:description|MSRXN:rxn1,rxn2;SSO:mmmmm:desc2|rxn3
+                sso_col = gene.get('Annotation:SSO', '')
+                if pd.notna(sso_col) and sso_col:
+                    for entry in str(sso_col).split(';'):
+                        entry = entry.strip()
+                        if not entry:
+                            continue
+                        term_part = entry.split('|')[0]
+                        parts = term_part.split(':')
+                        if len(parts) >= 2 and parts[0] == 'SSO':
+                            sso_id = pparts[1]#arts[0] + ':' + parts[1]
+                            feature.add_ontology_term('RAST', sso_id)
+
+                ms_features.append(feature)
 
     genome.add_features(ms_features)
 

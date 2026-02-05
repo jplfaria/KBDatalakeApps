@@ -332,8 +332,7 @@ Author: chenry
         if not skip_modeling_pipeline:
             for input_ref in input_refs:
                 info = self.util.get_object_info(input_ref)
-                print(f'info: {info}')
-                genome_tsv_path = path_user_genome / f'{info["name"]}_genome.tsv'
+                genome_tsv_path = path_user_genome / f'{info[1]}_genome.tsv'
                 run_user_genome_to_tsv(input_ref, genome_tsv_path)
 
                 # Print head of genome TSV for testing
@@ -346,7 +345,7 @@ Author: chenry
                 print("=" * 50)
 
                 # Run model reconstruction
-                model_output_path = path_user_genome / f'{info["name"]}_model'
+                model_output_path = path_user_genome / f'{info[1]}_model'
                 run_model_reconstruction(str(genome_tsv_path), str(model_output_path))
 
                 # Print head of model output for testing
@@ -358,7 +357,7 @@ Author: chenry
                 print("=" * 50)
 
                 # Run phenotype simulation
-                phenotype_output_path = path_user_genome / f'{info["name"]}_phenotypes.json'
+                phenotype_output_path = path_user_genome / f'{info[1]}_phenotypes.json'
                 cobra_model_path = str(model_output_path) + "_cobra.json"
                 run_phenotype_simulation(cobra_model_path, str(phenotype_output_path))
 

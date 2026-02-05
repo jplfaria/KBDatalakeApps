@@ -93,12 +93,13 @@ RUN pip install cobra
 RUN pip install networkx
 RUN pip install deepdiff
 RUN pip install h5py
+RUN pip install pyyaml
 
 RUN echo '1' >/dev/null && pip install --use-deprecated=legacy-resolver git+https://github.com/cshenry/ModelSEEDpy.git
 RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/cobrakbase.git && \
     cd cobrakbase && git checkout 68444e46fe3b68482da80798642461af2605e349
-RUN echo '1' >/dev/null && cd /deps && \
+RUN echo '2' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/KBUtilLib.git
 RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/kbaseapps/cb_annotation_ontology_api.git
