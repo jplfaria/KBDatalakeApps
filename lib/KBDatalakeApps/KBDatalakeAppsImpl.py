@@ -19,7 +19,7 @@ from installed_clients.RAST_SDKClient import RAST_SDK
 from installed_clients.kb_baktaClient import kb_bakta
 from installed_clients.kb_psortbClient import kb_psortb
 from installed_clients.kb_kofamClient import kb_kofam
-from modelseedpy import MSGenome, MSFeature, MSModelUtil
+from modelseedpy import MSGenome
 from cobrakbase import KBaseAPI
 from installed_clients.baseclient import ServerError
 from annotation.annotation import test_annotation
