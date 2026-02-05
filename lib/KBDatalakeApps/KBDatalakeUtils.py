@@ -26,12 +26,14 @@ from modelseedpy import AnnotationOntology, MSPackageManager, MSTemplateBuilder,
 from modelseedpy.helpers import get_template
 
 # BERDL query modules (Jose P. Faria)
+"""
 try:
     from berdl.berdl import QueryPangenomeBERDL, OntologyEnrichment
 except ImportError:
     # Fallback for when berdl module is not installed
     QueryPangenomeBERDL = None
     OntologyEnrichment = None
+"""
 
 
 class KBDataLakeUtils(KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionUtils, MSFBAUtils, MSBiochemUtils):
@@ -286,6 +288,9 @@ class KBDataLakeUtils(KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionU
 
         Author: Jose P. Faria (jplfaria@gmail.com)
         """
+
+        raise NotImplementedError("AI hallucinated")
+
         if QueryPangenomeBERDL is None:
             print("Warning: BERDL pangenome module not available, skipping")
             return
@@ -640,7 +645,7 @@ class KBDataLakeUtils(KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionU
             for gid, err in errors:
                 print(f"  {gid}: {err}")
 
-    def pipeline_run_ontology_term_kberdl_query(self):
+    def pipeline_run_ontology_term_kberdl_query(self, filename_datalake_db: str):
         """
         Pipeline step for running ontology term query against KBase BERDL.
 
@@ -662,6 +667,7 @@ class KBDataLakeUtils(KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionU
             return
 
         # Get token from environment or app parameters
+        # FIXME: wrong token this is KBase auth token not for BERDL. (Please check if this works)
         token = os.environ.get('KBASE_AUTH_TOKEN') or self.app_parameters.get('token', '')
         if not token:
             print("Warning: No BERDL token available, skipping ontology enrichment")
@@ -672,10 +678,9 @@ class KBDataLakeUtils(KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionU
         data_source = None
 
         # Source 1: SQLite database
-        db_path = os.path.join(self.directory, "berdl_tables.db")
-        if os.path.exists(db_path):
+        if os.path.exists(filename_datalake_db):
             try:
-                conn = sqlite3.connect(db_path)
+                conn = sqlite3.connect(str(filename_datalake_db))
                 # Check if genome_features table exists
                 cursor = conn.cursor()
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='genome_features'")
@@ -712,6 +717,7 @@ class KBDataLakeUtils(KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionU
 
         try:
             # Initialize enrichment client
+            # FIXME: which token BERDL or KBase ?
             enricher = OntologyEnrichment(token=token)
 
             # Collect all unique ontology terms across all genomes
@@ -740,9 +746,9 @@ class KBDataLakeUtils(KBReadsUtils, KBGenomeUtils, SKANIUtils, MSReconstructionU
             print(f"  Saved {len(enriched_df)} enriched terms to {output_path}")
 
             # Also save to SQLite database if it exists
-            if os.path.exists(db_path):
+            if os.path.exists(filename_datalake_db):
                 try:
-                    conn = sqlite3.connect(db_path)
+                    conn = sqlite3.connect(str(filename_datalake_db))
                     enriched_df.to_sql('ontology_terms', conn, if_exists='replace', index=False)
                     conn.close()
                     print(f"  Added 'ontology_terms' table to SQLite database")

@@ -64,6 +64,7 @@ class QueryPangenomeParquet(QueryPangenomeABC):
             base_path: Path to directory containing parquet files.
                        Default: /data/reference_data
         """
+        raise NotImplementedError("AI hallucinated. Files do not exists")
         self.base_path = Path(base_path or self.DEFAULT_BASE_PATH)
 
         # File paths
