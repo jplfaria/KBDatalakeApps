@@ -93,7 +93,8 @@ RUN /root/.local/bin/uv pip install --python /opt/env/berdl_genomes --no-progres
 #RUN rm -rf /miniconda/lib/python3.6/site-packages/ruamel*
 RUN pip install "numpy<1.24"
 
-RUN echo '1' >/dev/null && pip install --use-deprecated=legacy-resolver git+https://github.com/cshenry/ModelSEEDpy.git
+WORKDIR /deps
+RUN git clone https://github.com/cshenry/ModelSEEDpy.git && pip install --use-deprecated=legacy-resolver -e ModelSEEDpy
 RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/cobrakbase.git && \
     cd cobrakbase && git checkout 68444e46fe3b68482da80798642461af2605e349

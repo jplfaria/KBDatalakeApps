@@ -81,11 +81,35 @@ def run_psortb(client, org_flag, genome_file_input, output_file):
 
     result = client.annotate_proteins(proteins, org_flag)
     annotation = parse_psortb(result)
-
-    print(annotation)
+    print('write: ', str(output_file))
+    with open(str(output_file), 'w') as fh:
+        fh.write('feature_id\tprimary_localization_psortb\tsecondary_localization_psortb\n')
+        for feature_id, d in annotation.items():
+            pri_loc = d.get('Final_Localization', '')
+            sec_loc = d.get('Secondary_Localization', '')
+            fh.write(f'{feature_id}\t{pri_loc}\tsec_loc\n')
     pass
 
-
+{'Test3.CDS.1': {
+    'SeqID': 'Test3.CDS.1', 'CMSVM-_Localization': 'Unknown', 'CMSVM-_Details': '', 'CytoSVM-_Localization': 'Unknown', 'CytoSVM-_Details': '',
+    'ECSVM-_Localization': 'Unknown', 'ECSVM-_Details': '', 'ModHMM-_Localization': 'Unknown', 'ModHMM-_Details': 'No internal helices found',
+    'Motif-_Localization': 'Unknown', 'Motif-_Details': 'No motifs found', 'OMPMotif-_Localization': 'Unknown', 'OMPMotif-_Details': 'No motifs found',
+    'OMSVM-_Localization': 'Unknown', 'OMSVM-_Details': '', 'PPSVM-_Localization': 'Unknown', 'PPSVM-_Details': '', 'Profile-_Localization': 'Unknown',
+    'Profile-_Details': 'No matches to profiles found', 'SCL-BLAST-_Localization': 'Unknown', 'SCL-BLAST-_Details': 'No matches against database',
+    'SCL-BLASTe-_Localization': 'Unknown', 'SCL-BLASTe-_Details': 'No matches against database', 'Signal-_Localization': 'Unknown', 'Signal-_Details':
+        'No signal peptide detected', 'Cytoplasmic_Score': '2.00', 'CytoplasmicMembrane_Score': '2.00', 'Periplasmic_Score': '2.00', 'OuterMembrane_Score': '2.00',
+    'Extracellular_Score': '2.00', 'Final_Localization': 'Unknown', 'Final_Localization_Details': '', 'Final_Score': '2.00', 'Secondary_Localization': '',
+    'PSortb_Version': 'PSORTb version 3.0'},
+'Test3.CDS.2': {'SeqID': 'Test3.CDS.2', 'CMSVM-_Localization': 'Unknown', 'CMSVM-_Details': '', 'CytoSVM-_Localization': 'Cytoplasmic', 'CytoSVM-_Details': '',
+                'ECSVM-_Localization': 'Unknown', 'ECSVM-_Details': '', 'ModHMM-_Localization': 'Unknown', 'ModHMM-_Details': 'No internal helices found',
+                'Motif-_Localization': 'Unknown', 'Motif-_Details': 'No motifs found', 'OMPMotif-_Localization': 'Unknown', 'OMPMotif-_Details':
+                    'No motifs found', 'OMSVM-_Localization': 'Unknown', 'OMSVM-_Details': '', 'PPSVM-_Localization': 'Unknown', 'PPSVM-_Details': '',
+                'Profile-_Localization': 'Unknown', 'Profile-_Details': 'No matches to profiles found', 'SCL-BLAST-_Localization': 'Unknown',
+                'SCL-BLAST-_Details': 'No matches against database', 'SCL-BLASTe-_Localization': 'Unknown',
+                'SCL-BLASTe-_Details': 'No matches against database', 'Signal-_Localization': 'Unknown',
+                'Signal-_Details': 'No signal peptide detected', 'Cytoplasmic_Score': '8.96', 'CytoplasmicMembrane_Score': '0.51', 'Periplasmic_Score': '0.26',
+                'OuterMembrane_Score': '0.01', 'Extracellular_Score': '0.26', 'Final_Localization': 'Cytoplasmic', 'Final_Localization_Details': '', 'Final_Score': '8.96',
+                'Secondary_Localization': '', 'PSortb_Version': 'PSORTb version 3.0'}}
 """
         def test_annotation_rast():
             # Printing test file for RAST annotation demonstration

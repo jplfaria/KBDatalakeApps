@@ -15,8 +15,10 @@ from kbutillib import KBAnnotationUtils, KBReadsUtils, KBGenomeUtils, MSReconstr
 
 import pandas as pd
 import cobra
+from modelseedpy.core.msgenome import MSGenome, MSFeature
 from modelseedpy import AnnotationOntology, MSPackageManager, MSMedia, MSModelUtil, MSBuilder, MSATPCorrection, MSGapfill, MSGrowthPhenotype, MSGrowthPhenotypes, ModelSEEDBiochem, MSExpression
 from modelseedpy.core.mstemplate import MSTemplateBuilder
+from berdl import OntologyEnrichment
 
 # BERDL query modules (Jose P. Faria)
 """
