@@ -38,6 +38,7 @@ def parse_psortb(data: str):
 
 
 def run_rast(client_rast, genome_file_input, output_file):
+    print(f'run_rast {genome_file_input} -> {output_file}')
     genome = MSGenome.from_fasta(str(genome_file_input))
     proteins = {f.id: f.seq for f in genome.features if f.seq}
     l_sequences = []
@@ -59,6 +60,7 @@ def run_rast(client_rast, genome_file_input, output_file):
 
 
 def run_kofam(client_kofam, genome_file_input, output_file):
+    print(f'run_kofam {genome_file_input} -> {output_file}')
     genome = MSGenome.from_fasta(str(genome_file_input))
     proteins = {f.id: f.seq for f in genome.features if f.seq}
 
@@ -76,6 +78,7 @@ def run_psortb(client, org_flag, genome_file_input, output_file):
     """
     org_flag: -n -p -a
     """
+    print(f'run_psortb {org_flag} {genome_file_input} -> {output_file}')
     genome = MSGenome.from_fasta(str(genome_file_input))
     proteins = {f.id: f.seq for f in genome.features if f.seq}
 
@@ -90,26 +93,6 @@ def run_psortb(client, org_flag, genome_file_input, output_file):
             fh.write(f'{feature_id}\t{pri_loc}\tsec_loc\n')
     pass
 
-{'Test3.CDS.1': {
-    'SeqID': 'Test3.CDS.1', 'CMSVM-_Localization': 'Unknown', 'CMSVM-_Details': '', 'CytoSVM-_Localization': 'Unknown', 'CytoSVM-_Details': '',
-    'ECSVM-_Localization': 'Unknown', 'ECSVM-_Details': '', 'ModHMM-_Localization': 'Unknown', 'ModHMM-_Details': 'No internal helices found',
-    'Motif-_Localization': 'Unknown', 'Motif-_Details': 'No motifs found', 'OMPMotif-_Localization': 'Unknown', 'OMPMotif-_Details': 'No motifs found',
-    'OMSVM-_Localization': 'Unknown', 'OMSVM-_Details': '', 'PPSVM-_Localization': 'Unknown', 'PPSVM-_Details': '', 'Profile-_Localization': 'Unknown',
-    'Profile-_Details': 'No matches to profiles found', 'SCL-BLAST-_Localization': 'Unknown', 'SCL-BLAST-_Details': 'No matches against database',
-    'SCL-BLASTe-_Localization': 'Unknown', 'SCL-BLASTe-_Details': 'No matches against database', 'Signal-_Localization': 'Unknown', 'Signal-_Details':
-        'No signal peptide detected', 'Cytoplasmic_Score': '2.00', 'CytoplasmicMembrane_Score': '2.00', 'Periplasmic_Score': '2.00', 'OuterMembrane_Score': '2.00',
-    'Extracellular_Score': '2.00', 'Final_Localization': 'Unknown', 'Final_Localization_Details': '', 'Final_Score': '2.00', 'Secondary_Localization': '',
-    'PSortb_Version': 'PSORTb version 3.0'},
-'Test3.CDS.2': {'SeqID': 'Test3.CDS.2', 'CMSVM-_Localization': 'Unknown', 'CMSVM-_Details': '', 'CytoSVM-_Localization': 'Cytoplasmic', 'CytoSVM-_Details': '',
-                'ECSVM-_Localization': 'Unknown', 'ECSVM-_Details': '', 'ModHMM-_Localization': 'Unknown', 'ModHMM-_Details': 'No internal helices found',
-                'Motif-_Localization': 'Unknown', 'Motif-_Details': 'No motifs found', 'OMPMotif-_Localization': 'Unknown', 'OMPMotif-_Details':
-                    'No motifs found', 'OMSVM-_Localization': 'Unknown', 'OMSVM-_Details': '', 'PPSVM-_Localization': 'Unknown', 'PPSVM-_Details': '',
-                'Profile-_Localization': 'Unknown', 'Profile-_Details': 'No matches to profiles found', 'SCL-BLAST-_Localization': 'Unknown',
-                'SCL-BLAST-_Details': 'No matches against database', 'SCL-BLASTe-_Localization': 'Unknown',
-                'SCL-BLASTe-_Details': 'No matches against database', 'Signal-_Localization': 'Unknown',
-                'Signal-_Details': 'No signal peptide detected', 'Cytoplasmic_Score': '8.96', 'CytoplasmicMembrane_Score': '0.51', 'Periplasmic_Score': '0.26',
-                'OuterMembrane_Score': '0.01', 'Extracellular_Score': '0.26', 'Final_Localization': 'Cytoplasmic', 'Final_Localization_Details': '', 'Final_Score': '8.96',
-                'Secondary_Localization': '', 'PSortb_Version': 'PSORTb version 3.0'}}
 """
         def test_annotation_rast():
             # Printing test file for RAST annotation demonstration

@@ -275,14 +275,28 @@ Author: chenry
         executor = TaskExecutor(max_workers=4)
         path_user_genome = Path(self.shared_folder) / "genome"
         path_user_genome.mkdir(parents=True, exist_ok=True)
+        tasks = []
         for filename_faa in os.listdir(str(path_user_genome)):
             if filename_faa.endswith('.faa'):
                 print('found', filename_faa)
                 if skip_annotation:
                     print('skip_annotation')
                 else:
-                    executor.run_task(task_rast, str(path_user_genome / filename_faa), self.rast_client)
-                    executor.run_task(task_kofam, str(path_user_genome / filename_faa), self.kb_kofam)
+                    tasks.append(executor.run_task(task_rast,
+                                                   str(path_user_genome / filename_faa),
+                                                   self.rast_client))
+                    tasks.append(executor.run_task(task_kofam,
+                                                   str(path_user_genome / filename_faa),
+                                                   self.kb_kofam))
+
+        print('Task set barrier')
+        for t in tasks:
+            print(f'await for {t.args} {t.status}')
+            t.wait()
+        for t in tasks:
+            print(t.status)
+            print(t.result)
+            print(t.traceback)
 
         path_pangenome = Path(self.shared_folder) / "pangenome"
         path_pangenome.mkdir(parents=True, exist_ok=True)
