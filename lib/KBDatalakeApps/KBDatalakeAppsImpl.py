@@ -23,17 +23,9 @@ from modelseedpy.core.msgenome import MSGenome, MSFeature
 from cobrakbase import KBaseAPI
 from installed_clients.baseclient import ServerError
 from annotation.annotation import test_annotation, run_rast, run_kofam
-<<<<<<< HEAD
-<<<<<<< HEAD
 from executor.task_executor import TaskExecutor
 from executor.task import task_rast, task_kofam, task_psortb
-from KBDatalakeApps.KBDatalakeFunctions import run_phenotype_simulation,run_model_reconstruction,run_user_genome_to_tsv,get_util_instance
-=======
 from KBDatalakeApps.KBDatalakeUtils import KBDataLakeUtils,run_phenotype_simulation,run_model_reconstruction
->>>>>>> 67915579b4ce892a6890a6dd9a8203548ea93ead
-=======
-from KBDatalakeApps.KBDatalakeUtils import KBDataLakeUtils,run_phenotype_simulation,run_model_reconstruction
->>>>>>> 67915579b4ce892a6890a6dd9a8203548ea93ead
 
 # Import KBUtilLib utilities for common functionality
 #from kbutillib import KBWSUtils, KBCallbackUtils, SharedEnvUtils
@@ -261,12 +253,8 @@ Author: chenry
         if os.path.exists('/data') and os.path.exists('/data/reference_data'):
             print(os.listdir('/data/reference_data'))
 
-<<<<<<< HEAD
         if not skip_annotation:
             test_annotation(self.kb_kofam, self.kb_bakta, self.kb_psortb, self.rast_client)
-=======
-        test_annotation(self.kb_kofam, self.kb_bakta, self.kb_psortb, self.rast_client)
->>>>>>> 67915579b4ce892a6890a6dd9a8203548ea93ead
 
         #print('BERDL Token')
         #print(self.get_berdl_token())
