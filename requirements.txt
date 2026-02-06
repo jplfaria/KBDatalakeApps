@@ -1,4 +1,12 @@
 ModelSEEDpy @ git+https://github.com/cshenry/ModelSEEDpy.git
 cobrakbase @ git+https://github.com/cshenry/cobrakbase.git@68444e46fe3b68482da80798642461af2605e349
 polars==1.37.1
+chemw==0.3.2
+pandas
+cobra
+networkx
+deepdiff
+h5py
+pyyaml
+aiohttp
 berdl-genomes @ file:///kb/module/berdl
