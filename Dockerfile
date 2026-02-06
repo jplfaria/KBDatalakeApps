@@ -99,7 +99,7 @@ RUN echo '1' >/dev/null && pip install --use-deprecated=legacy-resolver git+http
 RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/cobrakbase.git && \
     cd cobrakbase && git checkout 68444e46fe3b68482da80798642461af2605e349
-RUN echo '2' >/dev/null && cd /deps && \
+RUN echo '3' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/KBUtilLib.git
 RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/kbaseapps/cb_annotation_ontology_api.git
