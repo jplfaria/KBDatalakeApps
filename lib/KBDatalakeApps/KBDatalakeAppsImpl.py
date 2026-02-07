@@ -321,7 +321,7 @@ Author: chenry
                     for _f in os.listdir(str(path_pangenome_members)):
                         if _f.endswith('.faa'):
                             tasks_pangeome.append(executor.run_task(task_rast,
-                                                                    str(path_pangenome_members / _f),
+                                                                    path_pangenome_members / _f,
                                                                     self.rast_client))
 
 
