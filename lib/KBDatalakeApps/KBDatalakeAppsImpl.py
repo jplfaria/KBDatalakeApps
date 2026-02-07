@@ -65,6 +65,9 @@ def _print_tree(root: Path, prefix: str):
             extension = "    " if is_last else "│   "
             _print_tree(path, prefix + extension)
 
+
+def get_berdl_token():
+    return os.environ.get('KBASE_SECURE_CONFIG_PARAM_kbaselakehouseserviceaccount_token')
 #END_HEADER
 
 
@@ -98,10 +101,6 @@ Author: chenry
         for key in required_keys:
             if key not in params or params[key] is None:
                 raise ValueError(f"Required parameter '{key}' is missing")
-
-    @staticmethod
-    def get_berdl_token():
-        return os.environ.get('KBASE_SECURE_CONFIG_PARAM_kbaselakehouseserviceaccount_token')
 
     @staticmethod
     def run_genome_pipeline(input_file):
@@ -201,7 +200,7 @@ Author: chenry
         self.kb_kofam = kb_kofam(self.callback_url, service_ver='beta')
         self.rast_client = RAST_SDK(self.callback_url, service_ver='beta')
         self.util = KBDataLakeUtils(kbversion="appdev", kb_version="appdev")
-        self.util.set_token(get_berdl_token(),namespace="berdl")
+        self.util.set_token(get_berdl_token(), namespace="berdl")
         print('polars thread pool', pl.thread_pool_size())
         #END_CONSTRUCTOR
         pass
