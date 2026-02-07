@@ -24,6 +24,7 @@ class BERDLPangenome:
             str(filename_faa.resolve()),
             'tmp',
         ]
+        print(f'mmseqs2 run {" ".join(cmd)}')
         with open(log_stdout, 'w') as fh_out, open(log_stderr, 'w') as fh_err:
             process = subprocess.Popen(
                 cmd,
@@ -44,6 +45,8 @@ class BERDLPangenome:
             raise RuntimeError(
                 f"mmseqs2 failed with exit code {ret}"
             )
+
+        print("mmseqs2 completed")
 
     def run(self, selected_clade_member_id):
         clade_id = self.pg.get_member_representative(selected_clade_member_id)
@@ -113,3 +116,4 @@ class BERDLPangenome:
         genome_master_faa.add_features(list(u_proteins.values()))
         genome_master_faa.to_fasta(str(self.paths.out_master_faa))
 
+        self.mmseqs2(self.paths.out_master_faa)
