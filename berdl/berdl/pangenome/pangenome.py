@@ -16,10 +16,24 @@ class BERDLPangenome:
         self.query_g = query_g
         self.paths = paths.ensure()
 
-    def f(self):
-        pl.
-        with open(self.paths.out_members_tsv, 'r') as fh:
+    @staticmethod
+    def read_cluster_tsv(file_mmseqs_clusters):
+        r_to_m = {}
+        m_to_r = {}
+        with open(str(file_mmseqs_clusters), 'r') as fh:
+            line = fh.readline()
+            while line:
+                r, m = line.strip().split('\t')
+                if r not in r_to_m:
+                    r_to_m[r] = set()
+                r_to_m[r].add(m)
+                m_to_r[m] = r
+                line = fh.readline()
+        return r_to_m, m_to_r
 
+    def extend_gene_to_cluster(self, file_mmseqs_clusters, d_gene_to_cluster):
+        r_to_m, m_to_r = self.read_cluster_tsv(file_mmseqs_clusters)
+        clade_members = pl.read_csv(self.paths.out_members_tsv, separator='\t')
         data = {
             'genome_id': [],
             'feature_id': [],
@@ -28,7 +42,7 @@ class BERDLPangenome:
             'mmseqs_rep_hash': [],
         }
         for member_id in {r[0] for r in clade_members.select("genome_id").rows()}:
-            genome = MSGenome.from_fasta(str(paths.genome_dir / f'{member_id}.faa'))
+            genome = MSGenome.from_fasta(str(self.paths.genome_dir / f'{member_id}.faa'))
             for feature in genome.features:
                 if feature.seq:
                     protein = ProteinSequence(feature.seq)
@@ -39,7 +53,7 @@ class BERDLPangenome:
                     data['protein_hash'].append(protein_h)
                     data['mmseqs_rep_hash'].append(m_to_r[protein_h])
         df = pl.DataFrame(data)
-        df.write_parquet(paths.root / 'pangenome_cluster_with_mmseqs.parquet')
+        df.write_parquet(self.paths.root / 'pangenome_cluster_with_mmseqs.parquet')
 
     def mmseqs2(self, filename_faa: Path):
         work_dir = self.paths.out_mmseqs_dir
@@ -157,8 +171,13 @@ class BERDLPangenome:
         genome_master_faa.add_features(list(u_proteins.values()))
         genome_master_faa.to_fasta(str(self.paths.out_master_faa))
 
-        # read clusters
-
-        # map user_genome_to_pangenome
-
+        # run mmseqs
         self.mmseqs2(self.paths.out_master_faa)
+
+        # read clusters
+        filename_clusters = self.paths.out_mmseqs_dir / f'{self.paths.out_master_faa.name[:-4]}_cluster.tsv'
+        if filename_clusters.exists():
+            self.extend_gene_to_cluster(filename_clusters, d_gene_to_cluster)
+
+        # map user_genome_to_pangenomes
+        
