@@ -467,19 +467,34 @@ Author: chenry
         self.logger.info(f"Shock ID: {shock_id}")
 
 
-        html_report = [{
+
+
+        html_links = []
+        html_report = {
             'shock_id': shock_id,
             'name': 'index.html',
             'label': 'BERDL Tables',
             'description': 'BERDL Table Viewer'
-        }]
+        }
+        html_links.append(html_report)
+
+        shock_id_data_genome = self.dfu.file_to_shock({
+            'file_path': self.shared_folder + '/genome',
+            'pack': 'zip'
+        })['shock_id']
+        html_links.append({
+            'shock_id': shock_id_data_genome,
+            'name': 'input_genomes.zip',
+            'label': 'Input Genomes Data',
+            'description': 'Input Genomes with annotation and model files'
+        })
 
         report_params = {
             'message': 'message_in_app hi!',
             'warnings': ['example warning'],
             'workspace_name': params['workspace_name'],
             'objects_created': [],
-            'html_links': html_report,
+            'html_links': [html_report],
             'direct_html_link_index': 0,
             # 'html_window_height': int(params['report_height']),
             'html_window_height': 800,

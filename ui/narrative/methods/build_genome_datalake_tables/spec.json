@@ -91,6 +91,30 @@
                 "checked_value": 1,
                 "unchecked_value": 0
             }
+        },
+        {
+            "id": "export_genome_data",
+            "optional": false,
+            "advanced": true,
+            "allow_multiple": false,
+            "default_values": ["0"],
+            "field_type": "checkbox",
+            "checkbox_options": {
+                "checked_value": 1,
+                "unchecked_value": 0
+            }
+        },
+        {
+            "id": "export_pangenome_data",
+            "optional": false,
+            "advanced": true,
+            "allow_multiple": false,
+            "default_values": ["0"],
+            "field_type": "checkbox",
+            "checkbox_options": {
+                "checked_value": 1,
+                "unchecked_value": 0
+            }
         }
     ],
     "behavior": {
@@ -135,6 +159,16 @@
                 {
                     "input_parameter": "skip_modeling_pipeline",
                     "target_property": "skip_modeling_pipeline",
+                    "target_type_transform": "int"
+                },
+                {
+                    "input_parameter": "export_genome_data",
+                    "target_property": "export_genome_data",
+                    "target_type_transform": "int"
+                },
+                {
+                    "input_parameter": "export_pangenome_data",
+                    "target_property": "export_pangenome_data",
                     "target_type_transform": "int"
                 }
             ],

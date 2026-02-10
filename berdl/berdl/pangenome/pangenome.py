@@ -196,4 +196,4 @@ class BERDLPangenome:
             input_genome_id = path_genome_faa.name[:-4]
             df_input_genome_fitness = create_genome_fitness_table(input_genome, input_genome_id, m_to_r, r_to_m,
                                                                   m_to_fitness_feature)
-            df_input_genome_fitness.write_parquet(path_input_genomes / f'user_{input_genome_id}_fitness.parquet')
+            df_input_genome_fitness.write_parquet(path_input_genomes / f'{input_genome_id}_fitness.parquet')
