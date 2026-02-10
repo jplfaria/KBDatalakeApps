@@ -66,8 +66,9 @@ class BERDLPreGenome:
         user_genome_files = {}
         with open(str(self.paths.library_user_genomes), 'w') as fh:
             for g in genomes:
-                file_genome = self.paths.genome_dir / f'user_{g.id}.faa'
-                file_assembly = self.paths.assembly_dir / f'user_{g.id}.fna'
+                genome_id = g.info.id
+                file_genome = self.paths.genome_dir / f'user_{genome_id}.faa'
+                file_assembly = self.paths.assembly_dir / f'user_{genome_id}.fna'
                 if not file_genome.exists():
                     g.to_fasta(str(file_genome))
                 if not file_assembly.exists():
@@ -75,7 +76,7 @@ class BERDLPreGenome:
                     g_assembly.to_fasta(str(file_assembly))
 
                 fh.write(f'{file_assembly.resolve()}\n')
-                user_genome_files[g.id] = (file_assembly.name, file_genome.name)
+                user_genome_files[genome_id] = (file_assembly.name, file_genome.name)
         return user_genome_files
 
     def run_ani_databases(self):

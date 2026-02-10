@@ -295,15 +295,6 @@ Author: chenry
                                                    path_user_genome / filename_faa,
                                                    self.kb_kofam))
 
-        print('Task set barrier')
-        for t in tasks:
-            print(f'await for {t.args} {t.status}')
-            t.wait()
-        for t in tasks:
-            print(t.status)
-            print(t.result)
-            print(t.traceback)
-
         path_pangenome = Path(self.shared_folder) / "pangenome"
         path_pangenome.mkdir(parents=True, exist_ok=True)
         for folder_pangenome in os.listdir(str(path_pangenome)):
@@ -330,6 +321,8 @@ Author: chenry
                                                                     self.rast_client))
 
 
+
+
                     """
                     try:
                         print(f"run kb_bakta annotation for {genome}")
@@ -353,6 +346,15 @@ Author: chenry
                     except Exception as ex:
                         print(f'nope {ex}')
                     """
+
+        print('Task set barrier')
+        for t in tasks:
+            print(f'await for {t.args} {t.status}')
+            t.wait()
+        for t in tasks:
+            print(t.status)
+            print(t.result)
+            print(t.traceback)
 
         if not skip_modeling_pipeline:
             for input_ref in input_refs:

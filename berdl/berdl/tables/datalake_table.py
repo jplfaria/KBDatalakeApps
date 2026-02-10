@@ -116,9 +116,9 @@ class DatalakeTableBuilder:
                 """)
 
         # read genome member list
-        genome = MSGenome.from_fasta(fffff)
+        # genome = MSGenome.from_fasta(fffff)
         for feature in genome.feature:
-
+            pass
         pass
 
     def build_phenotype_kegg_table(self):

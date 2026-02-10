@@ -4,6 +4,7 @@ from pathlib import Path
 from modelseedpy.core.msgenome import MSFeature, MSGenome
 from berdl.pangenome.paths_pangenome import PathsPangenome
 from berdl.hash_seq import ProteinSequence
+from berdl.fitness import create_genome_fitness_table, map_protein_hash_to_fitness_records
 
 
 _STRIP_FNA_ = len('/global/cfs/cdirs/kbase/jungbluth/Projects/Project_Pangenome_GTDB/GTDB_v214_download/ftp.ncbi.nlm.nih.gov/')
@@ -31,8 +32,7 @@ class BERDLPangenome:
                 line = fh.readline()
         return r_to_m, m_to_r
 
-    def extend_gene_to_cluster(self, file_mmseqs_clusters, d_gene_to_cluster):
-        r_to_m, m_to_r = self.read_cluster_tsv(file_mmseqs_clusters)
+    def extend_gene_to_cluster(self,  m_to_r, d_gene_to_cluster,):
         clade_members = pl.read_csv(self.paths.out_members_tsv, separator='\t')
         data = {
             'genome_id': [],
@@ -55,7 +55,7 @@ class BERDLPangenome:
         df = pl.DataFrame(data)
         df.write_parquet(self.paths.root / 'pangenome_cluster_with_mmseqs.parquet')
 
-    def mmseqs2(self, filename_faa: Path):
+    def mmseqs2(self, filename_faa: Path, t=30):
         work_dir = self.paths.out_mmseqs_dir
         log_stdout = work_dir / 'log.out'
         log_stderr = work_dir / 'log.err'
@@ -64,6 +64,7 @@ class BERDLPangenome:
             '--min-seq-id', '0.0',
             '--cov-mode', '0',
             '-c', '0.80',
+            '--threads', str(t),
             str(filename_faa.resolve()),
             filename_faa.name[:-4],
             'mmseqs2_tmp',
@@ -175,9 +176,24 @@ class BERDLPangenome:
         self.mmseqs2(self.paths.out_master_faa)
 
         # read clusters
+        print('write extended clusters')
         filename_clusters = self.paths.out_mmseqs_dir / f'{self.paths.out_master_faa.name[:-4]}_cluster.tsv'
+        r_to_m, m_to_r = self.read_cluster_tsv(filename_clusters)
         if filename_clusters.exists():
-            self.extend_gene_to_cluster(filename_clusters, d_gene_to_cluster)
+            self.extend_gene_to_cluster(m_to_r, d_gene_to_cluster)
 
         # map user_genome_to_pangenomes
-        
+        print('map user genome to clusters')
+        with open(self.paths.genome_prep_clade_data, 'r') as fh:
+            user_to_clade = {f'user_{k}.faa' for k, v in json.load(fh).items() if v == selected_clade_member_id}
+
+        # map cluster to fitness
+        m_to_fitness_feature = map_protein_hash_to_fitness_records()
+        for filename in user_to_clade:
+            path_input_genomes = (self.paths.root / '../..' / 'genome').resolve()
+            path_genome_faa = path_input_genomes / filename
+            input_genome = MSGenome.from_fasta(str(path_genome_faa))
+            input_genome_id = path_genome_faa.name[:-4]
+            df_input_genome_fitness = create_genome_fitness_table(input_genome, input_genome_id, m_to_r, r_to_m,
+                                                                  m_to_fitness_feature)
+            df_input_genome_fitness.write_parquet(path_input_genomes / f'user_{input_genome_id}_fitness.parquet')
