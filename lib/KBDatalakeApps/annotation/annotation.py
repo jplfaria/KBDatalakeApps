@@ -3,6 +3,35 @@ from pathlib import Path
 from modelseedpy import MSGenome
 
 
+def collect_ontology(_doc):
+    ontology = []
+    ontology.append(['bakta_product', _doc['product']])
+    for db_xref in _doc.get('db_xrefs', []):
+        if db_xref.startswith('UniRef:UniRef50'):
+            ontology.append(['uniref_50', db_xref])  # not defined in berld ontology
+        elif db_xref.startswith('UniRef:UniRef90'):
+            ontology.append(['uniref_90', db_xref])  # not defined in berld ontology
+        elif db_xref.startswith('UniRef:UniRef100'):
+            ontology.append(['uniref_100', db_xref])  # not defined in berld ontology
+        elif db_xref.startswith('SO:'):
+            ontology.append(['SO', db_xref])
+        elif db_xref.startswith('EC:'):
+            ontology.append(['EC', db_xref])
+        elif db_xref.startswith('KEGG:'):
+            ontology.append(['KEGG', db_xref])  # not defined in berld ontology
+        elif db_xref.startswith('GO:'):
+            ontology.append(['GO', db_xref])
+        elif db_xref.startswith('COG:'):
+            ontology.append(['COG', db_xref])
+        elif db_xref.startswith('PFAM:'):
+            ontology.append(['PFAM', db_xref])
+        elif db_xref.startswith('UniRef:UniRef100:'):
+            ontology.append(['uniref_100', db_xref])
+        else:
+            ontology.append(['others', db_xref])
+    return ontology
+
+
 def parse_kofam(data: str):
     annotation = {}
     for line in data.split('\n'):
@@ -17,8 +46,19 @@ def parse_kofam(data: str):
     return annotation
 
 
-def parse_bakta(data: str):
-    pass
+def parse_bakta(data: dict):
+    annotation = {}
+    features = data.get("features", [])
+    for doc in features:
+        i = doc['id']
+        annotation[i] = {}
+
+        feature_ontology = collect_ontology(doc)
+        for on, v in feature_ontology:
+            if on not in annotation[i]:
+                annotation[i][on] = set()
+            annotation[i][on].add(v)
+    return annotation
 
 
 def parse_psortb(data: str):
@@ -93,28 +133,29 @@ def run_psortb(client, org_flag, genome_file_input, output_file):
             fh.write(f'{feature_id}\t{pri_loc}\tsec_loc\n')
     pass
 
-"""
-        def test_annotation_rast():
-            # Printing test file for RAST annotation demonstration
-            proteins = [
-                ("Test3.CDS.1", "tRNA:Cm32/Um32 methyltransferase", "LFILTATGNMSLCGLKKECLIAASELVTCRE"),
-                ("Test3.CDS.2", "Aspartokinase (EC 2.7.2.4);Homoserine dehydrogenase (EC 1.1.1.3)",
-                 "MRVLKFGGTSVANAERFLRVADILESNARQGQVATVLSAPAKITNHLVAMIEKTISGQDALPNISDAERIFAELLTGLAAAQPGFPLAQLKTFVDQEFAQIKHVLHGISLLGQCPDSINAALICRGEKMSIAIMAGVLEARGHNVTVIDPVEKLLAVGHYLESTVDIAESTRRIAASRIPADHMVLMAGFTAGNEKGELVVLGRNGSDYSAAVLAACLRADCCEIWTDVDGVYTCDPRQVPDARLLKSMSYQEAMELSYFGAKVLHPRTITPIAQFQIPCLIKNTGNPQAPGTLIGASRDEDELPVKGISNLNNMAMFSVSGPGMKGMVGMAARVFAAMSRARISVVLITQSSSEYSISFCVPQSDCVRAERAMQEEFYLELKEGLLEPLAVTERLAIISVVGDGMRTLRGISAKFFAALARANINIVAIAQGSSERSISVVVNNDDATTGVRVTHQMLFNTDQVIEVFVIGVGGVGGALLEQLKRQQSWLKNKHIDLRVCGVANSKALLTNVHGLNLENWQEELAQAKEPFNLGRLIRLVKEYHLLNPVIVDCTSSQAVADQYADFLREGFHVVTPNKKANTSSMDYYHQLRYAAEKSRRKFLYDTNVGAGLPVIENLQNLLNAGDELMKFSGILSGSLSYIFGKLDEGMSFSEATTLAREMGYTEPDPRDDLSGMDVARKLLILARETGRELELADIEIEPVLPAEFNAEGDVAAFMANLSQLDDLFAARVAKARDEGKVLRYVGNIDEDGVCRVKIAEVDGNDPLFKVKNGENALAFYSHYYQPLPLVLRGYGAGNDVTAAGVFADLLRTLSWKLGV"),
-            ]
-            with open(self.shared_folder + "/test.faa", "w") as f:
-                for seq_id, function, sequence in proteins:
-                    f.write(f">{seq_id} {function}\n{sequence}\n")
 
-            with open(self.shared_folder + "/test.faa", 'r') as fh:
-                print('example faa:\n', fh.read())
-            self.run_RAST_annotation(self.shared_folder + "/test.faa", self.shared_folder + "/rast.tsv",
-                                     self.rast_client)
+def run_bakta(client, genome_file_input, output_file):
+    print(f'run_bakta {genome_file_input} -> {output_file}')
+    genome = MSGenome.from_fasta(str(genome_file_input))
+    proteins = {f.id: f.seq for f in genome.features if f.seq}
 
-        try:
-            test_annotation_rast()
-        except ServerError as ex_server:
-            logging.warning(f'error: {ex_server}')
-        """
+    result = client.annotate_proteins(proteins)
+    annotation = parse_bakta(result)
+    print('write: ', str(output_file))
+    keys = set()
+    for v in annotation.values():
+        keys |= v
+    keys = sorted(keys)
+    with open(str(output_file), 'w') as fh:
+        header = "\t".join(keys)
+        fh.write(f'feature_id\t{header}\n')
+        for feature_id, ontology_set in annotation.items():
+            values = []
+            for k in keys:
+                values.append('; '.join(ontology_set.get(k, [])))
+            _str_values = '\t'.join(values)
+            fh.write(f'{feature_id}\t{_str_values}\n')
+
 
 def test_annotation(client_kofam, client_bakta, client_psortb, client_rast):
     import time
@@ -144,6 +185,7 @@ def test_annotation(client_kofam, client_bakta, client_psortb, client_rast):
         print(f"Execution time: {end_time - start_time} seconds")
         print(f'received results of type {type(result)} and size {len(result)}')
         print(result)
+        print('parse', parse_bakta(result))
     except Exception as ex:
         print(f'nope {ex}')
 

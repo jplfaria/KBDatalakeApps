@@ -24,7 +24,7 @@ from cobrakbase import KBaseAPI
 from installed_clients.baseclient import ServerError
 from annotation.annotation import test_annotation, run_rast, run_kofam
 from executor.task_executor import TaskExecutor
-from executor.task import task_rast, task_kofam, task_psortb
+from executor.task import task_rast, task_kofam, task_psortb, task_bakta
 from KBDatalakeApps.KBDatalakeUtils import KBDataLakeUtils,run_phenotype_simulation,run_model_reconstruction
 
 # Import KBUtilLib utilities for common functionality
@@ -296,6 +296,13 @@ Author: chenry
                     tasks.append(executor.run_task(task_kofam,
                                                    path_user_genome / filename_faa,
                                                    self.kb_kofam))
+                    tasks.append(executor.run_task(task_bakta,
+                                                   path_user_genome / filename_faa,
+                                                   self.kb_bakta))
+                    tasks.append(executor.run_task(task_psortb,
+                                                   path_user_genome / filename_faa,
+                                                   '-n',  # FIXME: predict template class first to select proper flag
+                                                   self.kb_psortb))
 
         path_pangenome = Path(self.shared_folder) / "pangenome"
         path_pangenome.mkdir(parents=True, exist_ok=True)
