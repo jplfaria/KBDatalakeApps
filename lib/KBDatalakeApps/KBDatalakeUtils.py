@@ -1216,3 +1216,705 @@ def run_model_reconstruction(input_filename, output_filename, classifier_dir,kbv
     # Save to JSON file
     with open(output_filename + "_data.json", 'w') as f:
         json.dump(output_data, f, indent=2)
+def generate_ontology_tables(
+    clade_folder: str,
+    reference_data_path: str = "/data/reference_data",
+    genome_features_table: str = "genome_features",
+    output_folder_name: str = "ontology_data"
+) -> bool:
+    """
+    Generate ontology tables for a clade folder.
+
+    This function reads genome features from a db.sqlite file, maps RAST
+    annotations to SEED roles, extracts EC numbers, enriches all ontology
+    terms, and saves three output tables.
+
+    Args:
+        clade_folder: Path to the clade folder (e.g., /path/to/pangenome/s__Escherichia_coli)
+                      Must contain a db.sqlite file with genome_features table.
+        reference_data_path: Path to directory containing reference files:
+                            - seed.json (RAST → seed.role mapping)
+                            - statements.parquet (labels, definitions, relationships)
+                            - kegg_ko_definitions.parquet
+                            - cog_definitions.parquet
+                            Default: /data/reference_data
+        genome_features_table: Name of the table in db.sqlite to read features from.
+                              Default: genome_features
+        output_folder_name: Name of the output folder to create.
+                           Default: ontology_data
+
+    Returns:
+        True on success, False on failure.
+
+    Output files (in clade_folder/output_folder_name/):
+        - ontology_terms.tsv: All ontology terms with labels and definitions
+        - ontology_definition.tsv: Ontology prefix definitions
+        - ontology_relationships.tsv: Term relationships (is_a, enables_reaction)
+    """
+    import sqlite3
+    import re
+    import time
+    from pathlib import Path
+    import pyarrow.parquet as pq
+
+    clade_path = Path(clade_folder)
+    db_path = clade_path / "db.sqlite"
+    output_path = clade_path / output_folder_name
+
+    # Check if db.sqlite exists
+    if not db_path.exists():
+        print(f"Warning: db.sqlite not found in {clade_folder}, skipping ontology generation")
+        return False
+
+    print(f"\n{'='*70}")
+    print(f"Generating ontology tables for: {clade_folder}")
+    print(f"{'='*70}")
+
+    try:
+        # =====================================================================
+        # STEP 1: Load genome features from SQLite
+        # =====================================================================
+        print(f"\n1. Loading genome features from {db_path}...")
+        conn = sqlite3.connect(str(db_path))
+
+        # Check if table exists
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{genome_features_table}'")
+        if not cursor.fetchone():
+            print(f"   Warning: Table '{genome_features_table}' not found in db.sqlite")
+            conn.close()
+            return False
+
+        genome_df = pd.read_sql_query(f"SELECT * FROM {genome_features_table}", conn)
+        conn.close()
+        print(f"   Loaded {len(genome_df)} features")
+        print(f"   Columns: {list(genome_df.columns)[:10]}...")
+
+        # =====================================================================
+        # STEP 2: Initialize RASTSeedMapper for RAST → seed.role mapping
+        # =====================================================================
+        print("\n2. Loading RAST → seed.role mapper...")
+
+        ref_path = Path(reference_data_path)
+        seed_json_path = ref_path / "seed.json"
+
+        mapper = None
+        if seed_json_path.exists():
+            mapper = RASTSeedMapper(str(seed_json_path))
+        else:
+            print(f"   Warning: seed.json not found at {seed_json_path}")
+            print(f"   RAST → seed.role mapping will be skipped")
+
+        # =====================================================================
+        # STEP 3: Extract ontology terms from genome features
+        # =====================================================================
+        print("\n3. Extracting ontology terms...")
+
+        terms_by_type = {
+            'GO': set(), 'EC': set(), 'KEGG': set(),
+            'COG': set(), 'PFAM': set(), 'SO': set(), 'seed.role': set()
+        }
+
+        # Patterns for extracting existing term IDs from annotation columns
+        patterns = {
+            'GO': re.compile(r'GO:\d+'),
+            'EC': re.compile(r'EC:[\d\.-]+'),
+            'KEGG': re.compile(r'(?:KEGG:)?K\d{5}'),
+            'COG': re.compile(r'COG:(?:COG\d+|[A-Z])'),
+            'PFAM': re.compile(r'(?:PFAM:)?PF\d+(?:\.\d+)?'),
+            'SO': re.compile(r'SO:\d+'),
+            'seed.role': re.compile(r'seed\.role:\d+'),
+        }
+
+        # Pattern for extracting EC from RAST function strings like "enzyme (EC 1.1.1.1)"
+        ec_in_rast_pattern = re.compile(r'\(EC[:\s]*([\d\.-]+)\)')
+
+        # Track RAST functions for seed.role mapping
+        rast_functions = set()
+        seed_role_to_label = {}  # seed.role ID -> RAST function label
+
+        # Find the RAST function column
+        rast_col = None
+        for col in ['rast_function', 'rast_functions', 'functions', 'Annotation:SSO']:
+            if col in genome_df.columns:
+                rast_col = col
+                break
+
+        if rast_col:
+            print(f"   Using RAST function column: {rast_col}")
+
+        # Extract terms from all columns
+        for col in genome_df.columns:
+            for _, row in genome_df.iterrows():
+                value = str(row.get(col, ''))
+                if not value or value == 'nan':
+                    continue
+
+                # Extract existing ontology term IDs
+                for ont_type, pattern in patterns.items():
+                    matches = pattern.findall(value)
+                    for match in matches:
+                        # Normalize prefixes
+                        if ont_type == 'KEGG' and not match.startswith('KEGG:'):
+                            match = f'KEGG:{match}'
+                        elif ont_type == 'PFAM' and not match.startswith('PFAM:'):
+                            match = f'PFAM:{match}'
+                        terms_by_type[ont_type].add(match)
+
+                # Extract EC from RAST function strings
+                if col == rast_col:
+                    ec_matches = ec_in_rast_pattern.findall(value)
+                    for ec_num in ec_matches:
+                        terms_by_type['EC'].add(f'EC:{ec_num}')
+
+                    # Collect RAST functions for seed.role mapping
+                    if value and value != 'nan':
+                        # Split multi-function annotations
+                        for separator in [' / ', ' @ ', '; ']:
+                            if separator in value:
+                                parts = value.split(separator)
+                                for part in parts:
+                                    part = part.strip()
+                                    if part:
+                                        rast_functions.add(part)
+                        if not any(sep in value for sep in [' / ', ' @ ', '; ']):
+                            rast_functions.add(value)
+
+        # =====================================================================
+        # STEP 4: Map RAST functions to seed.role IDs
+        # =====================================================================
+        if mapper and rast_functions:
+            print(f"\n4. Mapping {len(rast_functions)} RAST functions to seed.role IDs...")
+
+            mapped_count = 0
+            for rast_func in rast_functions:
+                # Get all matching seed.role IDs for this function
+                mappings = mapper.map_all_annotations(rast_func)
+                for matched_part, seed_id in mappings:
+                    if seed_id:
+                        terms_by_type['seed.role'].add(seed_id)
+                        seed_role_to_label[seed_id] = matched_part
+                        mapped_count += 1
+
+            print(f"   Mapped {mapped_count} RAST functions to {len(terms_by_type['seed.role'])} unique seed.role IDs")
+        else:
+            print("\n4. Skipping RAST → seed.role mapping (no mapper or no RAST functions)")
+
+        # Summary of extracted terms
+        total_terms = sum(len(terms) for terms in terms_by_type.values())
+        print(f"\n   Total unique terms: {total_terms}")
+        for ont_type, terms in sorted(terms_by_type.items()):
+            if terms:
+                print(f"     {ont_type}: {len(terms)}")
+
+        if total_terms == 0:
+            print("   Warning: No ontology terms found in genome features")
+            os.makedirs(output_path, exist_ok=True)
+            pd.DataFrame(columns=['ontology_prefix', 'identifier', 'label', 'definition']).to_csv(
+                output_path / 'ontology_terms.tsv', sep='\t', index=False)
+            pd.DataFrame(columns=['ontology_prefix', 'definition']).to_csv(
+                output_path / 'ontology_definition.tsv', sep='\t', index=False)
+            pd.DataFrame(columns=['subject', 'predicate', 'object']).to_csv(
+                output_path / 'ontology_relationships.tsv', sep='\t', index=False)
+            return True
+
+        # =====================================================================
+        # STEP 5: Enrich terms from local parquet files
+        # =====================================================================
+        print("\n5. Enriching terms from local parquet files...")
+
+        statements_path = ref_path / "statements.parquet"
+        kegg_path = ref_path / "kegg_ko_definitions.parquet"
+        cog_path = ref_path / "cog_definitions.parquet"
+
+        enriched_terms = []
+        statements_df = None
+
+        # Collect all terms that need enrichment from statements.parquet
+        berdl_terms = list(terms_by_type['GO'] | terms_by_type['EC'] |
+                          terms_by_type['SO'] | terms_by_type['PFAM'] |
+                          terms_by_type['seed.role'])
+
+        if berdl_terms and statements_path.exists():
+            print(f"   Loading statements.parquet...")
+            statements_df = pq.read_table(statements_path).to_pandas()
+            print(f"   Loaded {len(statements_df)} statements")
+
+            # Filter to relevant subjects and predicates for labels/definitions
+            mask = (
+                statements_df['subject'].isin(berdl_terms) &
+                statements_df['predicate'].isin(['rdfs:label', 'IAO:0000115'])
+            )
+            filtered = statements_df[mask]
+
+            # Build lookup dict
+            term_info = {}
+            for _, row in filtered.iterrows():
+                subj = row['subject']
+                pred = row['predicate']
+                val = row['value'] if 'value' in row else ''
+
+                if subj not in term_info:
+                    term_info[subj] = {'label': '', 'definition': ''}
+
+                if pred == 'rdfs:label':
+                    term_info[subj]['label'] = val
+                elif pred == 'IAO:0000115':
+                    term_info[subj]['definition'] = val
+
+            # Add to enriched_terms
+            for term_id in berdl_terms:
+                prefix = term_id.split(':')[0]
+                info = term_info.get(term_id, {'label': '', 'definition': ''})
+
+                # For seed.role, use the RAST function as label if no label found
+                label = info['label']
+                if prefix == 'seed.role' and not label and term_id in seed_role_to_label:
+                    label = seed_role_to_label[term_id]
+
+                enriched_terms.append({
+                    'ontology_prefix': prefix,
+                    'identifier': term_id,
+                    'label': label,
+                    'definition': info['definition']
+                })
+
+            print(f"   Enriched {len([t for t in enriched_terms if t['label']])} terms with labels")
+
+        # Enrich KEGG from kegg_ko_definitions.parquet
+        kegg_terms = list(terms_by_type['KEGG'])
+        if kegg_terms and kegg_path.exists():
+            print(f"   Loading kegg_ko_definitions.parquet...")
+            kegg_df = pq.read_table(kegg_path).to_pandas()
+            ko_lookup = dict(zip(kegg_df['ko_id'], kegg_df['definition']))
+
+            for ko_id in kegg_terms:
+                k_num = ko_id.replace('KEGG:', '')
+                definition = ko_lookup.get(k_num, '')
+                label = re.sub(r'\s*\[EC:[^\]]+\]', '', definition).strip() if definition else ''
+
+                enriched_terms.append({
+                    'ontology_prefix': 'KEGG',
+                    'identifier': ko_id,
+                    'label': label,
+                    'definition': definition
+                })
+
+        # Enrich COG from cog_definitions.parquet
+        cog_terms = list(terms_by_type['COG'])
+        if cog_terms and cog_path.exists():
+            print(f"   Loading cog_definitions.parquet...")
+            cog_df = pq.read_table(cog_path).to_pandas()
+            cog_lookup = {row['cog_id']: row for _, row in cog_df.iterrows()}
+
+            for cog_id in cog_terms:
+                raw_id = cog_id.replace('COG:', '')
+                info = cog_lookup.get(raw_id, {})
+
+                enriched_terms.append({
+                    'ontology_prefix': 'COG',
+                    'identifier': cog_id,
+                    'label': info.get('name', '') if isinstance(info, dict) else '',
+                    'definition': info.get('pathway', '') if isinstance(info, dict) else ''
+                })
+
+        # =====================================================================
+        # STEP 6: Extract relationships from statements.parquet
+        # =====================================================================
+        print("\n6. Extracting ontology relationships...")
+
+        relationships = []
+        all_term_ids = set()
+        for terms in terms_by_type.values():
+            all_term_ids.update(terms)
+
+        seed_reaction_terms = set()
+
+        if statements_df is not None:
+            # Look for is_a (GO) and enables_reaction (seed.role -> seed.reaction)
+            relevant_predicates = {
+                'rdfs:subClassOf',  # is_a hierarchy
+                '<https://modelseed.org/ontology/enables_reaction>',  # seed.role → reaction
+            }
+
+            # Filter for our terms and relevant predicates
+            mask = (
+                statements_df['subject'].isin(all_term_ids) &
+                statements_df['predicate'].isin(relevant_predicates)
+            )
+            rel_df = statements_df[mask]
+
+            # Clean predicates and add to relationships
+            predicate_labels = {
+                'rdfs:subClassOf': 'is_a',
+                '<https://modelseed.org/ontology/enables_reaction>': 'enables_reaction',
+            }
+
+            for _, row in rel_df.iterrows():
+                subj = row['subject']
+                pred = row['predicate']
+                obj = row['object']
+
+                # Skip self-referential or blank nodes
+                if subj == obj or str(obj).startswith('_:'):
+                    continue
+
+                # Skip EC and SO parent hierarchy (not useful per team decision)
+                if pred == 'rdfs:subClassOf':
+                    if subj.startswith('EC:') or subj.startswith('SO:'):
+                        continue
+
+                # Track seed.reaction terms for backfill
+                if str(obj).startswith('seed.reaction:'):
+                    seed_reaction_terms.add(obj)
+
+                clean_pred = predicate_labels.get(pred, pred)
+                relationships.append({
+                    'subject': subj,
+                    'predicate': clean_pred,
+                    'object': obj
+                })
+
+            print(f"   Found {len(relationships)} relationships")
+            print(f"   Found {len(seed_reaction_terms)} seed.reaction terms")
+
+            # Backfill seed.reaction terms into enriched_terms
+            if seed_reaction_terms:
+                print(f"   Backfilling seed.reaction term labels...")
+                mask = (
+                    statements_df['subject'].isin(seed_reaction_terms) &
+                    statements_df['predicate'].isin(['rdfs:label', 'IAO:0000115'])
+                )
+                rxn_filtered = statements_df[mask]
+
+                rxn_info = {}
+                for _, row in rxn_filtered.iterrows():
+                    subj = row['subject']
+                    pred = row['predicate']
+                    val = row['value'] if 'value' in row else ''
+
+                    if subj not in rxn_info:
+                        rxn_info[subj] = {'label': '', 'definition': ''}
+
+                    if pred == 'rdfs:label':
+                        rxn_info[subj]['label'] = val
+                    elif pred == 'IAO:0000115':
+                        rxn_info[subj]['definition'] = val
+
+                for rxn_id in seed_reaction_terms:
+                    info = rxn_info.get(rxn_id, {'label': '', 'definition': ''})
+                    enriched_terms.append({
+                        'ontology_prefix': 'seed.reaction',
+                        'identifier': rxn_id,
+                        'label': info['label'],
+                        'definition': info['definition']
+                    })
+
+        # =====================================================================
+        # STEP 7: Add EC column to ontology terms
+        # =====================================================================
+        print("\n7. Adding EC column to ontology terms...")
+
+        # Load KEGG KO -> EC mapping from reference file
+        kegg_ec_mapping_path = ref_path / "kegg_ko_ec_mapping.tsv"
+        ko_to_ec = {}
+
+        if kegg_ec_mapping_path.exists():
+            print(f"   Loading KEGG KO -> EC mapping...")
+            with open(kegg_ec_mapping_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if '\t' in line:
+                        ec_raw, ko_raw = line.split('\t')
+                        ec_id = ec_raw.replace('ec:', 'EC:')
+                        ko_id = ko_raw.replace('ko:', 'KEGG:')
+                        if ko_id not in ko_to_ec:
+                            ko_to_ec[ko_id] = []
+                        ko_to_ec[ko_id].append(ec_id)
+            print(f"   Loaded {len(ko_to_ec)} KEGG KO -> EC mappings")
+        else:
+            print(f"   Warning: kegg_ko_ec_mapping.tsv not found at {kegg_ec_mapping_path}")
+
+        # Patterns for extracting EC and TC from labels
+        ec_label_pattern = re.compile(r'\(EC\s*([\d\.-]+)\)')
+        tc_label_pattern = re.compile(r'\(TC\s*([\d\.\w]+)\)')
+
+        kegg_ec_count = 0
+        seed_ec_count = 0
+        seed_tc_count = 0
+        ec_copy_count = 0
+
+        for term in enriched_terms:
+            ec_values = []
+            prefix = term['ontology_prefix']
+            identifier = term['identifier']
+            label = term.get('label', '')
+
+            if prefix == 'KEGG':
+                # KEGG KO: lookup from mapping file
+                if identifier in ko_to_ec:
+                    ec_values.extend(ko_to_ec[identifier])
+                    kegg_ec_count += 1
+
+            elif prefix == 'seed.role':
+                # seed.role: extract EC and TC from label
+                if label:
+                    ec_matches = ec_label_pattern.findall(label)
+                    if ec_matches:
+                        ec_values.extend(['EC:' + m for m in ec_matches])
+                        seed_ec_count += 1
+
+                    tc_matches = tc_label_pattern.findall(label)
+                    if tc_matches:
+                        ec_values.extend(['TC:' + m for m in tc_matches])
+                        seed_tc_count += 1
+
+            elif prefix == 'EC':
+                # EC terms: copy identifier itself
+                ec_values.append(identifier)
+                ec_copy_count += 1
+
+            # Join multiple values with pipe
+            term['ec'] = '|'.join(ec_values) if ec_values else ''
+
+        print(f"   KEGG KO with EC: {kegg_ec_count}")
+        print(f"   seed.role with EC: {seed_ec_count}")
+        print(f"   seed.role with TC: {seed_tc_count}")
+        print(f"   EC terms copied: {ec_copy_count}")
+
+        total_with_ec = sum(1 for t in enriched_terms if t.get('ec'))
+        print(f"   Total terms with ec column: {total_with_ec}")
+
+        # =====================================================================
+        # STEP 8: Create ontology definitions
+        # =====================================================================
+        print("\n8. Creating ontology definitions...")
+
+        ontology_definitions = {
+            'GO': 'Gene Ontology - standardized vocabulary for gene and protein functions',
+            'EC': 'Enzyme Commission numbers - classification of enzymes by reaction type',
+            'SO': 'Sequence Ontology - vocabulary for sequence features',
+            'PFAM': 'Protein Families database - protein domain families',
+            'KEGG': 'KEGG Orthologs - ortholog groups linking genes across species',
+            'COG': 'Clusters of Orthologous Groups - protein functional categories',
+            'seed.role': 'SEED Role Ontology - functional roles from RAST annotation',
+            'seed.reaction': 'SEED Reaction Ontology - biochemical reactions from ModelSEED',
+        }
+
+        # Only include definitions for prefixes we actually have terms for
+        present_prefixes = set(t['ontology_prefix'] for t in enriched_terms)
+        definition_rows = [
+            {'ontology_prefix': prefix, 'definition': desc}
+            for prefix, desc in ontology_definitions.items()
+            if prefix in present_prefixes
+        ]
+
+        # =====================================================================
+        # STEP 9: Save output files
+        # =====================================================================
+        print(f"\n9. Saving output to {output_path}...")
+
+        os.makedirs(output_path, exist_ok=True)
+
+        # Save ontology_terms.tsv
+        terms_df = pd.DataFrame(enriched_terms)
+        terms_df = terms_df.drop_duplicates(subset=['identifier'])
+        # Sort by ontology_prefix, then by identifier for proper ordering
+        terms_df = terms_df.sort_values(['ontology_prefix', 'identifier']).reset_index(drop=True)
+        terms_path = output_path / 'ontology_terms.tsv'
+        terms_df.to_csv(terms_path, sep='\t', index=False)
+        print(f"   Saved {len(terms_df)} terms to ontology_terms.tsv")
+
+        # Summary by prefix
+        for prefix in terms_df['ontology_prefix'].unique():
+            count = len(terms_df[terms_df['ontology_prefix'] == prefix])
+            print(f"     {prefix}: {count}")
+
+        # Save ontology_definition.tsv
+        defs_df = pd.DataFrame(definition_rows)
+        defs_path = output_path / 'ontology_definition.tsv'
+        defs_df.to_csv(defs_path, sep='\t', index=False)
+        print(f"   Saved {len(defs_df)} definitions to ontology_definition.tsv")
+
+        # Save ontology_relationships.tsv
+        rels_df = pd.DataFrame(relationships)
+        if not rels_df.empty:
+            rels_df = rels_df.drop_duplicates()
+        rels_path = output_path / 'ontology_relationships.tsv'
+        rels_df.to_csv(rels_path, sep='\t', index=False)
+        print(f"   Saved {len(rels_df)} relationships to ontology_relationships.tsv")
+
+        if not rels_df.empty:
+            print(f"   By predicate:")
+            for pred in rels_df['predicate'].unique():
+                count = len(rels_df[rels_df['predicate'] == pred])
+                print(f"     {pred}: {count}")
+
+        print(f"\n{'='*70}")
+        print(f"Ontology table generation complete!")
+        print(f"{'='*70}")
+
+        return True
+
+    except Exception as e:
+        import traceback
+        print(f"\nError generating ontology tables: {e}")
+        print(traceback.format_exc())
+        return False
+
+class RASTSeedMapper:
+    """
+    Maps RAST annotations to SEED role ontology identifiers.
+    
+    This mapper handles:
+    - Direct exact matches
+    - Multi-function annotations with various separators (/, @, ;)
+    - Different SEED ontology formats (URL-based and clean IDs)
+    
+    Usage:
+        mapper = RASTSeedMapper("/data/reference_data/seed.json")
+        seed_id = mapper.map_annotation("Alcohol dehydrogenase")
+        # Returns: "seed.role:0000000001234"
+    """
+    
+    def __init__(self, seed_ontology_path: str):
+        """
+        Initialize the mapper with a SEED ontology file.
+        
+        Args:
+            seed_ontology_path: Path to SEED ontology JSON file (seed.json)
+        """
+        self.seed_mapping = {}
+        self.multi_func_separators = [' / ', ' @ ', '; ']
+        self._load_seed_ontology(seed_ontology_path)
+    
+    def _load_seed_ontology(self, path: str) -> None:
+        """Load SEED ontology from JSON file."""
+        import json
+        from pathlib import Path
+        
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Ontology file not found: {path}")
+        
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Extract nodes from JSON-LD format
+        graphs = data.get("graphs", [])
+        if not graphs:
+            print("Warning: No graphs found in ontology file")
+            return
+            
+        nodes = graphs[0].get("nodes", [])
+        
+        for node in nodes:
+            label = node.get("lbl")
+            node_id = node.get("id")
+            
+            if not label or not node_id:
+                continue
+                
+            # Parse different ID formats
+            seed_role_id = self._parse_seed_role_id(node_id)
+            if seed_role_id:
+                self.seed_mapping[label] = seed_role_id
+                
+        print(f"    Loaded {len(self.seed_mapping)} SEED role mappings")
+        
+    def _parse_seed_role_id(self, raw_id: str) -> str:
+        """Parse SEED role ID from various formats."""
+        if not raw_id:
+            return None
+            
+        # URL format with Role parameter
+        if "Role=" in raw_id:
+            try:
+                role_number = raw_id.split("Role=")[-1]
+                return f"seed.role:{role_number}"
+            except IndexError:
+                return None
+                
+        # Already in clean format
+        if raw_id.startswith("seed.role:"):
+            return raw_id
+            
+        # OBO-style IDs (e.g., seed.role_0000000001234)
+        if '_' in raw_id and 'seed.role_' in raw_id:
+            ontology_part = raw_id.split('/')[-1]
+            return ontology_part.replace("_", ":", 1)
+            
+        return None
+    
+    def split_multi_function(self, annotation: str) -> list:
+        """Split multi-function annotations into individual components."""
+        if not annotation:
+            return []
+            
+        parts = [annotation]
+        for separator in self.multi_func_separators:
+            new_parts = []
+            for part in parts:
+                split_parts = part.split(separator)
+                new_parts.extend(p.strip() for p in split_parts if p.strip())
+            parts = new_parts
+            
+        return parts
+    
+    def map_annotation(self, annotation: str) -> str:
+        """
+        Map a RAST annotation to its SEED role ID.
+        
+        Args:
+            annotation: RAST annotation string
+            
+        Returns:
+            seed.role ID if found, None otherwise
+        """
+        if not annotation:
+            return None
+            
+        # Try direct match first
+        if annotation in self.seed_mapping:
+            return self.seed_mapping[annotation]
+            
+        # Try splitting multi-function annotations
+        parts = self.split_multi_function(annotation)
+        
+        if len(parts) > 1:
+            for part in parts:
+                if part in self.seed_mapping:
+                    return self.seed_mapping[part]
+                    
+        return None
+    
+    def map_all_annotations(self, annotation: str) -> list:
+        """
+        Map a RAST annotation to ALL matching SEED role IDs.
+        
+        For multi-function annotations like "Thioredoxin / Glutaredoxin",
+        returns all matching roles.
+        
+        Args:
+            annotation: RAST annotation string
+            
+        Returns:
+            List of tuples (matched_part, seed_role_id)
+        """
+        if not annotation:
+            return []
+        
+        results = []
+        
+        # Try direct match first
+        if annotation in self.seed_mapping:
+            results.append((annotation, self.seed_mapping[annotation]))
+        
+        # Try splitting multi-function annotations
+        parts = self.split_multi_function(annotation)
+        
+        for part in parts:
+            if part in self.seed_mapping and part != annotation:
+                results.append((part, self.seed_mapping[part]))
+        
+        return results
