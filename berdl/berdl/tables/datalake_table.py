@@ -13,10 +13,10 @@ class DatalakeTableBuilder:
         self.root_pangenome = root_pangenome
 
     def build(self):
-        self.build_genome_table()
+        #self.build_genome_table()
         self.build_ani_table()
-        self.build_user_genome_features_table()
-        self.build_pangenome_genome_features_table()
+        #self.build_user_genome_features_table()
+        #self.build_pangenome_genome_features_table()
          #self.build_phenotype_kegg_table()
         # model
         # ontology

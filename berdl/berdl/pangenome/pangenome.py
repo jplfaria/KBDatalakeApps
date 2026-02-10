@@ -114,17 +114,21 @@ class BERDLPangenome:
         members = {}
         for row in clade_members.rows(named=True):
             member_id = row['genome_id']
-            genome_features = self.query_g.get_genome_features(member_id)
-            genome_features.to_fasta(self.paths.genome_dir / f'{member_id}.faa')
-            members[member_id] = genome_features
+            filename_faa = self.paths.genome_dir / f'{member_id}.faa'
+            filename_fna = self.paths.assembly_dir / f'{member_id}.fna'
 
-            # write contigs
-            # FIXME: cant fetch from parquet use temp ref data for contigs
-            path_ref_contig = Path('/data/reference_data/contigs')
-            file_contigs = path_ref_contig / row['fna_file_path_nersc'][_STRIP_FNA_:]
-            if file_contigs.exists():
-                genome_contigs = MSGenome.from_fasta(str(file_contigs))
-                genome_contigs.to_fasta(self.paths.assembly_dir / f'{member_id}.fna')
+            if not filename_faa.exists():
+                genome_features = self.query_g.get_genome_features(member_id)
+                genome_features.to_fasta(filename_faa)
+                members[member_id] = genome_features
+
+            if not filename_fna.exists():
+                # FIXME: cant fetch from parquet use temp ref data for contigs
+                path_ref_contig = Path('/data/reference_data/contigs')
+                file_contigs = path_ref_contig / row['fna_file_path_nersc'][_STRIP_FNA_:]
+                if file_contigs.exists():
+                    genome_contigs = MSGenome.from_fasta(str(file_contigs))
+                    genome_contigs.to_fasta(filename_fna)
 
         # build master protein user_genome + pangenome
 
@@ -172,12 +176,14 @@ class BERDLPangenome:
         genome_master_faa.add_features(list(u_proteins.values()))
         genome_master_faa.to_fasta(str(self.paths.out_master_faa))
 
+        filename_clusters = self.paths.out_mmseqs_dir / f'{self.paths.out_master_faa.name[:-4]}_cluster.tsv'
         # run mmseqs
-        self.mmseqs2(self.paths.out_master_faa)
+        if not filename_clusters.exists():
+            self.mmseqs2(self.paths.out_master_faa)
 
         # read clusters
         print('write extended clusters')
-        filename_clusters = self.paths.out_mmseqs_dir / f'{self.paths.out_master_faa.name[:-4]}_cluster.tsv'
+
         r_to_m, m_to_r = self.read_cluster_tsv(filename_clusters)
         if filename_clusters.exists():
             self.extend_gene_to_cluster(m_to_r, d_gene_to_cluster)

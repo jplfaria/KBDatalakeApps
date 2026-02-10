@@ -65,12 +65,12 @@ def parse_psortb(data: str):
     annotation = {}
     lines = data.split('\n')
     h = lines[0].strip().split('\t')
-    print(h)
+    # print(h)
     # skip header
     for line in lines[1:]:
         if line:
             r = line.strip().split('\t')
-            print(r)
+            # print(r)
             d = {h[i]: r[i].strip() for i in range(len(h))}
             annotation[d['SeqID']] = d
 
