@@ -1549,11 +1549,41 @@ def generate_ontology_tables(
         else:
             print(f"   Warning: kegg_ko_ec_mapping.tsv not found at {kegg_ec_mapping_path}")
 
+        # Extract GO -> EC mapping from statements.parquet (oio:hasDbXref to EC:)
+        go_to_ec = {}
+        if statements_df is not None:
+            print(f"   Extracting GO -> EC mappings from statements.parquet...")
+            # Filter for GO terms with hasDbXref predicate
+            go_ec_mask = (
+                statements_df['subject'].str.startswith('GO:', na=False) &
+                (statements_df['predicate'] == 'oio:hasDbXref')
+            )
+            go_dbxref_df = statements_df[go_ec_mask]
+
+            # Extract EC numbers from object or value column
+            ec_pattern = re.compile(r'EC:[\d\.\-]+')
+            for _, row in go_dbxref_df.iterrows():
+                go_id = row['subject']
+                # Check both object and value columns for EC reference
+                obj_val = str(row.get('object', '')) + ' ' + str(row.get('value', ''))
+                ec_matches = ec_pattern.findall(obj_val)
+                if ec_matches:
+                    if go_id not in go_to_ec:
+                        go_to_ec[go_id] = []
+                    go_to_ec[go_id].extend(ec_matches)
+
+            # Deduplicate EC values per GO term
+            for go_id in go_to_ec:
+                go_to_ec[go_id] = list(set(go_to_ec[go_id]))
+
+            print(f"   Found {len(go_to_ec)} GO terms with EC cross-references")
+
         # Patterns for extracting EC and TC from labels
         ec_label_pattern = re.compile(r'\(EC\s*([\d\.-]+)\)')
         tc_label_pattern = re.compile(r'\(TC\s*([\d\.\w]+)\)')
 
         kegg_ec_count = 0
+        go_ec_count = 0
         seed_ec_count = 0
         seed_tc_count = 0
         ec_copy_count = 0
@@ -1569,6 +1599,12 @@ def generate_ontology_tables(
                 if identifier in ko_to_ec:
                     ec_values.extend(ko_to_ec[identifier])
                     kegg_ec_count += 1
+
+            elif prefix == 'GO':
+                # GO terms: lookup EC from hasDbXref extracted above
+                if identifier in go_to_ec:
+                    ec_values.extend(go_to_ec[identifier])
+                    go_ec_count += 1
 
             elif prefix == 'seed.role':
                 # seed.role: extract EC and TC from label
@@ -1592,6 +1628,7 @@ def generate_ontology_tables(
             term['ec'] = '|'.join(ec_values) if ec_values else ''
 
         print(f"   KEGG KO with EC: {kegg_ec_count}")
+        print(f"   GO terms with EC: {go_ec_count}")
         print(f"   seed.role with EC: {seed_ec_count}")
         print(f"   seed.role with TC: {seed_tc_count}")
         print(f"   EC terms copied: {ec_copy_count}")
