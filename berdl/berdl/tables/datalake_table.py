@@ -152,7 +152,7 @@ class DatalakeTableBuilder:
             'contig': [],
             'feature_id': [],
             #'aliases': [],
-            'length': [],
+            #'length': [],
             'start': [],
             'end': [],
             'strand': [],
@@ -193,18 +193,24 @@ class DatalakeTableBuilder:
 
                 for feature in genome.features:
                     feature_id = feature.id
+                    _parts = feature.description.split(' ')
+                    contig_id = _parts[0]
+                    start = _parts[1]
+                    end = _parts[2]
+                    strand = _parts[3]
+                    feature_type = _parts[4]
                     protein_sequence = feature.seq if self.include_protein_sequence else None
                     protein_hash = ProteinSequence(feature.seq) if feature.seq else None
 
                     data['genome'].append(genome_id)
-                    #data['contig'].append(contig)
+                    data['contig'].append(contig_id)
                     data['feature_id'].append(feature_id)
                     #data['aliases'].append(aliases)
                     #data['length'].append(feature_len)
-                    #data['start'].append(start)
-                    #data['end'].append(end)
-                    #data['strand'].append(strand)
-                    data['type'].append('CDS')
+                    data['start'].append(start)
+                    data['end'].append(end)
+                    data['strand'].append(strand)
+                    data['type'].append(feature_type)
                     #data['dna_sequence'].append(dna_sequence)
                     data['protein_sequence'].append(protein_sequence)
                     data['protein_sequence_hash'].append(protein_hash)
@@ -217,6 +223,8 @@ class DatalakeTableBuilder:
                             data[f'ontology_{term}'].append(None)
                         else:
                             data[f'ontology_{term}'].append('; '.join(values))
+
+        return pl.DataFrame(data)
 
     def build_user_genome_feature_parquet(self):
         input_genome_dir = Path(self.root_genome.genome_dir)

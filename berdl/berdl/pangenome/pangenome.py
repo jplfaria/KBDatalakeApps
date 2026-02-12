@@ -77,7 +77,8 @@ class BERDLPangenome:
                 line = fh.readline()
         return r_to_m, m_to_r
 
-    def extend_gene_to_cluster(self,  m_to_r, d_gene_to_cluster,):
+    def extend_gene_to_cluster(self,  m_to_r, d_gene_to_cluster, df_cluster_attr):
+        cluster_core_flag = {row['gene_cluster_id']:row['is_core'] for row in df_cluster_attr.rows(named=True)}
         clade_members = pl.read_csv(self.paths.out_members_tsv, separator='\t')
         data = {
             'genome_id': [],
@@ -85,6 +86,7 @@ class BERDLPangenome:
             'cluster_id': [],
             'protein_hash': [],
             'mmseqs_rep_hash': [],
+            'is_core': [],
         }
         for member_id in {r[0] for r in clade_members.select("genome_id").rows()}:
             genome = MSGenome.from_fasta(str(self.paths.genome_dir / f'{member_id}.faa'))
@@ -96,6 +98,7 @@ class BERDLPangenome:
                     data['feature_id'].append(feature.id)
                     data['cluster_id'].append(d_gene_to_cluster[feature.id])
                     data['protein_hash'].append(protein_h)
+                    data['is_core'].append(cluster_core_flag.get(feature.id))
                     if protein_h in m_to_r:
                         data['mmseqs_rep_hash'].append(m_to_r[protein_h])
                     else:
@@ -150,6 +153,12 @@ class BERDLPangenome:
         clade_members.write_csv(self.paths.out_members_tsv, separator='\t')
 
         clade_gene_clusters = self.pg.get_clade_gene_clusters(clade_id)
+        df_cluster_attr = clade_gene_clusters.select([
+            'gene_cluster_id',
+            pl.col("is_core").cast(pl.Int64),
+            pl.col("is_singleton").cast(pl.Int64)
+        ])
+
         clade_cluster_ids = set(clade_gene_clusters['gene_cluster_id'])
         df_gene_genecluster = self.pg.get_clusters_members(clade_cluster_ids)
         d_gene_to_cluster = {o[0]: o[1] for o in df_gene_genecluster.iter_rows()}
@@ -194,17 +203,13 @@ class BERDLPangenome:
         r_to_m, m_to_r = self.read_cluster_tsv(filename_clusters)
         df_cluster = None
         if filename_clusters.exists():
-            df_cluster = self.extend_gene_to_cluster(m_to_r, d_gene_to_cluster)
+            df_cluster = self.extend_gene_to_cluster(m_to_r, d_gene_to_cluster, df_cluster_attr)
 
         with open(self.paths.genome_prep_clade_data, 'r') as fh:
             user_to_clade = {f'user_{k}.faa' for k, v in json.load(fh).items() if v == selected_clade_member_id}
         # map user_genome_to_pangenomes
         if df_cluster is not None:
-            df_cluster_attr = clade_gene_clusters.select([
-                'gene_cluster_id',
-                pl.col("is_core").cast(pl.Int64),
-                pl.col("is_singleton").cast(pl.Int64)
-            ])
+
             pangenome_cluster_attr = {
                 row['gene_cluster_id']: {
                     'is_core': row['is_core'],
