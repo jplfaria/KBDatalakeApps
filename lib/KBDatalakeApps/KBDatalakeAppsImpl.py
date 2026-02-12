@@ -348,6 +348,7 @@ Author: chenry
                             tasks_pangeome.append(executor.run_task(task_rast,
                                                                     path_pangenome_members / _f,
                                                                     self.rast_client))
+                            #tasks_pangeome.append(executor.run_task())
 
 
 
