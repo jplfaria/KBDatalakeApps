@@ -30,10 +30,6 @@ if __name__ == "__main__":
         "filename_faa",
         help="Path to Genome Protein Fasta"
     )
-    parser.add_argument(
-        "selected_clade_member",
-        help="clade member to build pangenome"
-    )
     #  read input params
     args = parser.parse_args()
     input_filename_faa = args.filename_faa

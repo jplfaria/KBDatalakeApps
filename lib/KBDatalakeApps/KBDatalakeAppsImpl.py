@@ -144,6 +144,26 @@ Author: chenry
             raise RuntimeError(
                 f"pangenome pipeline failed with exit code {ret}"
             )
+        
+    @staticmethod
+    def run_pangenome_pipeline(filename_faa):
+        cmd = ["/kb/module/scripts/run_annotation.sh", str(filename_faa)]
+
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=None,  # inherit parent stdout
+            stderr=None,  # inherit parent stderr
+            env=env
+        )
+
+        ret = process.wait()
+        if ret != 0:
+            raise RuntimeError(
+                f"annotation pipeline failed with exit code {ret}"
+            )
 
     @staticmethod
     def run_build_table(input_file, selected_member_id):
