@@ -24,11 +24,12 @@ def convert_kbase_location(feature_location):
 
 class DatalakeTableBuilder:
 
-    def __init__(self, root_genome: GenomePaths, root_pangenome: PathsPangenome):
+    def __init__(self, root_genome: GenomePaths, root_pangenome: PathsPangenome,
+                 include_dna_sequence: True, include_protein_sequence: True):
         self.root_genome = root_genome
         self.root_pangenome = root_pangenome
-        self.include_dna_sequence = False
-        self.include_protein_sequence = False
+        self.include_dna_sequence = include_dna_sequence
+        self.include_protein_sequence = include_protein_sequence
 
     def build(self):
         #self.build_genome_table()
@@ -322,9 +323,9 @@ class DatalakeTableBuilder:
                         data['protein_sequence'].append(protein_sequence)
                         data['protein_sequence_hash'].append(protein_hash)
                         data['pangenome_cluster'].append(
-                            d_pangenome_profile.get('feature_id', {}).get('pangenome_cluster'))
+                            d_pangenome_profile.get(feature_id, {}).get('pangenome_cluster'))
                         data['pangenome_is_core'].append(
-                            d_pangenome_profile.get('feature_id', {}).get('is_core')
+                            d_pangenome_profile.get(feature_id, {}).get('is_core')
                         )
                         for term in all_ontology_terms:
                             values = feature_ontology_terms.get(feature_id, {}).get(term)

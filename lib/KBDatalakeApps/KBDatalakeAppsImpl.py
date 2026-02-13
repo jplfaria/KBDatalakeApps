@@ -533,7 +533,7 @@ Author: chenry
                     if path_db.exists():
                         print(f'found db for {folder_pangenome}! file_to_shock: {path_db}')
                         archive_shock_id = self.dfu.file_to_shock({
-                            'file_path': str(shared_folder_path / 'pangenome' / folder_pangenome / 'db.sqlite'),
+                            'file_path': str(path_db),
                             'pack': 'zip'
                         })['shock_id']
                         file_links.append({
