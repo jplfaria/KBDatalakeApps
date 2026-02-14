@@ -18,7 +18,7 @@ sys.path = [base_dir+"/KBUtilLib/src",base_dir+"/cobrakbase",base_dir+"/ModelSEE
 sys.path.insert(0, os.path.join(kbutillib_dir,"lib"))
 
 # Import utilities with error handling
-from kbutillib import NotebookUtils, SharedEnvUtils
+from kbutillib import NotebookUtils, SharedEnvUtils,KBWSUtils
 
 import pandas as pd
 

@@ -25,7 +25,7 @@ from installed_clients.baseclient import ServerError
 from annotation.annotation import test_annotation, run_rast, run_kofam
 from executor.task_executor import TaskExecutor
 from executor.task import task_rast, task_kofam, task_psortb, task_bakta
-from KBDatalakeApps.KBDatalakeUtils import KBDataLakeUtils,run_phenotype_simulation,run_model_reconstruction
+from KBDatalakeApps.KBDatalakeUtils import KBDataLakeUtils
 
 # Import KBUtilLib utilities for common functionality
 #from kbutillib import KBWSUtils, KBCallbackUtils, SharedEnvUtils
@@ -144,7 +144,7 @@ Author: chenry
             raise RuntimeError(
                 f"pangenome pipeline failed with exit code {ret}"
             )
-        
+
     @staticmethod
     def run_annotation_pipeline(filename_faa):
         cmd = ["/kb/module/scripts/run_annotation.sh", str(filename_faa)]
@@ -183,6 +183,26 @@ Author: chenry
         if ret != 0:
             raise RuntimeError(
                 f"table builder pipeline failed with exit code {ret}"
+            )
+
+    @staticmethod
+    def run_model_pipeline(input_file):
+        cmd = ["/kb/module/scripts/run_model_pipeline.sh", str(input_file)]
+
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=None,  # inherit parent stdout
+            stderr=None,  # inherit parent stderr
+            env=env
+        )
+
+        ret = process.wait()
+        if ret != 0:
+            raise RuntimeError(
+                f"model pipeline failed with exit code {ret}"
             )
 
     @staticmethod
@@ -413,49 +433,19 @@ Author: chenry
             t.wait()
 
         if not skip_modeling_pipeline:
-            for input_ref in input_refs:
-                info = self.util.get_object_info(input_ref)
-                genome_tsv_path = path_user_genome / f'{info[1]}_genome.tsv'
-                self.util.run_user_genome_to_tsv(input_ref, genome_tsv_path)
-
-                # Print head of genome TSV for testing
-                print(f"=== Head of genome TSV: {genome_tsv_path} ===")
-                with open(genome_tsv_path, 'r') as f:
-                    for i, line in enumerate(f):
-                        if i >= 5:
-                            break
-                        print(line.rstrip())
-                print("=" * 50)
-
-                # Run model reconstruction
-                model_output_path = path_user_genome / f'{info[1]}_model'
-                classifier_dir = Path('/kb/module/data')
-                run_model_reconstruction(str(genome_tsv_path), str(model_output_path), str(classifier_dir),
-                                         kbversion=self.util.kb_version)
-
-                # Print head of model output for testing
-                model_data_file = str(model_output_path) + "_data.json"
-                print(f"=== Head of model data: {model_data_file} ===")
-                with open(model_data_file, 'r') as f:
-                    content = f.read(2000)
-                    print(content[:2000])
-                print("=" * 50)
-
-                # Run phenotype simulation
-                phenotype_output_path = path_user_genome / f'{info[1]}_phenotypes.json'
-                cobra_model_path = str(model_output_path) + "_cobra.json"
-                run_phenotype_simulation(cobra_model_path,
-                                         str(phenotype_output_path),
-                                         data_path='/kb/module/data',
-                                         max_phenotypes=5,
-                                         kbversion=self.util.kb_version)
-
-                # Print head of phenotype output for testing
-                print(f"=== Head of phenotype results: {phenotype_output_path} ===")
-                with open(phenotype_output_path, 'r') as f:
-                    content = f.read(2000)
-                    print(content[:2000])
-                print("=" * 50)
+            model_params = {
+                "input_refs": input_refs,
+                "token": ctx['token'],
+                "scratch": str(self.shared_folder),
+                "kbase_endpoint": self.config.get("kbase-endpoint", ""),
+                "kbversion": self.util.kb_version,
+                "max_phenotypes": None,
+            }
+            model_params_file = Path(self.shared_folder) / 'model_pipeline_params.json'
+            with open(str(model_params_file), 'w') as f:
+                json.dump(model_params, f, indent=2)
+            print(f"Wrote model pipeline params: {model_params_file}")
+            self.run_model_pipeline(str(model_params_file))
         else:
             print('skip modeling pipeline')
 

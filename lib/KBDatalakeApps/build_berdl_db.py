@@ -1034,15 +1034,83 @@ def build_gene_reaction_data_table(output_dir, conn):
 
 
 # ---------------------------------------------------------------------------
+# Table 7: genome_reactions
+# ---------------------------------------------------------------------------
+def build_genome_reactions_table(output_dir, conn):
+    """Load genome_reactions.tsv as the genome_reactions table."""
+    tsv_path = os.path.join(output_dir, "models", "genome_reactions.tsv")
+    if not os.path.exists(tsv_path):
+        print("No genome_reactions.tsv found, skipping genome_reactions table")
+        return pd.DataFrame()
+
+    df = pd.read_csv(tsv_path, sep="\t", low_memory=False)
+    df.to_sql("genome_reactions", conn, if_exists="replace", index=False)
+    print(f"Built 'genome_reactions' table: {len(df)} rows")
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Table 8: growth_phenotype_summary
+# ---------------------------------------------------------------------------
+def build_growth_phenotype_summary_table(output_dir, conn):
+    """Load model_performance.tsv as the growth_phenotype_summary table."""
+    tsv_path = os.path.join(output_dir, "phenotypes", "model_performance.tsv")
+    if not os.path.exists(tsv_path):
+        print("No model_performance.tsv found, skipping growth_phenotype_summary table")
+        return pd.DataFrame()
+
+    df = pd.read_csv(tsv_path, sep="\t")
+    df.to_sql("growth_phenotype_summary", conn, if_exists="replace", index=False)
+    print(f"Built 'growth_phenotype_summary' table: {len(df)} rows")
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Table 8: growth_phenotypes_detailed
+# ---------------------------------------------------------------------------
+def build_growth_phenotypes_detailed_table(output_dir, conn):
+    """Load genome_phenotypes.tsv as the growth_phenotypes_detailed table."""
+    tsv_path = os.path.join(output_dir, "phenotypes", "genome_phenotypes.tsv")
+    if not os.path.exists(tsv_path):
+        print("No genome_phenotypes.tsv found, skipping growth_phenotypes_detailed table")
+        return pd.DataFrame()
+
+    df = pd.read_csv(tsv_path, sep="\t", low_memory=False)
+    df.to_sql("growth_phenotypes_detailed", conn, if_exists="replace", index=False)
+    print(f"Built 'growth_phenotypes_detailed' table: {len(df)} rows")
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Table 9: gene_phenotypes
+# ---------------------------------------------------------------------------
+def build_gene_phenotypes_table(output_dir, conn):
+    """Load gene_phenotypes.tsv as the gene_phenotypes table.
+
+    Columns are loaded dynamically from whatever is in the TSV file.
+    """
+    tsv_path = os.path.join(output_dir, "phenotypes", "gene_phenotypes.tsv")
+    if not os.path.exists(tsv_path):
+        print("No gene_phenotypes.tsv found, skipping gene_phenotypes table")
+        return pd.DataFrame()
+
+    df = pd.read_csv(tsv_path, sep="\t", low_memory=False)
+    df.to_sql("gene_phenotypes", conn, if_exists="replace", index=False)
+    print(f"Built 'gene_phenotypes' table: {len(df)} rows")
+    return df
+
+
+# ---------------------------------------------------------------------------
 # Master function
 # ---------------------------------------------------------------------------
-def build_berdl_database(output_dir, db_path=None):
+def build_berdl_database(output_dir, db_path=None, reference_data_path="/data/"):
     """
     Build a complete BERDL SQLite database from pipeline output files.
 
     Args:
         output_dir: Path to pipeline output directory (e.g., .../Acinetobacter_baylyi_ADP1_RAST)
         db_path: Path for output SQLite database. Defaults to {output_dir}/berdl_tables.db
+        reference_data_path: Path to reference data directory for ontology enrichment.
     """
     if db_path is None:
         db_path = os.path.join(output_dir, "berdl_tables.db")
@@ -1062,6 +1130,10 @@ def build_berdl_database(output_dir, db_path=None):
         build_missing_functions_table(output_dir, conn)
         build_pan_genome_features_table(output_dir, conn)
         build_gene_reaction_data_table(output_dir, conn)
+        build_genome_reactions_table(output_dir, conn)
+        build_growth_phenotype_summary_table(output_dir, conn)
+        build_growth_phenotypes_detailed_table(output_dir, conn)
+        build_gene_phenotypes_table(output_dir, conn)
 
         conn.commit()
         print("=" * 60)
@@ -1076,6 +1148,19 @@ def build_berdl_database(output_dir, db_path=None):
             print(f"  {table_name}: {count} rows")
     finally:
         conn.close()
+
+    # Generate ontology tables (operates on the closed database file)
+    from KBDatalakeApps.KBDatalakeUtils import generate_ontology_tables
+    generate_ontology_tables(
+        input_database=db_path,
+        reference_data_path=reference_data_path,
+        source_tables=[
+            "genome_features",
+            "pan_genome_features",
+            "genome_reactions",
+            "growth_phenotypes_detailed",
+        ],
+    )
 
 
 if __name__ == "__main__":

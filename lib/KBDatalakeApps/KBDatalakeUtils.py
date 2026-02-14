@@ -145,7 +145,7 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                                experiment_data_file=None, phenoset_file=None,
                                fitness_mapping_dir=None, fitness_genomes_dir=None,
                                model_data_dir=None, reference_phenosim_dir=None,
-                               fitness_threshold=-0.5):
+                               fitness_threshold=-0.5, essential_genes_file=None):
         """
         Pipeline step for building phenotype tables.
 
@@ -236,12 +236,13 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
 
         # Pre-build the condition mapping DataFrame for efficient joins
         mapping_df = None
+        phenotypes_with_fitness_data = set()  # compound IDs that have fitness experiments
         if setid_to_msid:
             mapping_rows = [(fg_id, sid, msid) for (fg_id, sid), msid in setid_to_msid.items()]
             mapping_df = pd.DataFrame(mapping_rows, columns=['fitness_genome_id', 'set_id', 'msid'])
+            phenotypes_with_fitness_data = set(mapping_df['msid'])
 
-        # === Load model data for minimal media fluxes and gene-reaction mapping ===
-        model_minimal_fluxes = {}  # genome_id -> {rxn_id: flux}
+        # === Load model data for gene-reaction mapping ===
         model_rxn_to_genes = {}   # genome_id -> {rxn_id: set(gene_ids)}
         if model_data_dir and os.path.isdir(model_data_dir):
             for mf in os.listdir(model_data_dir):
@@ -256,8 +257,6 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                 if not mdata.get('success', False):
                     continue
                 mid = mdata.get('model_info', {}).get('model_id', mf.replace('_data.json', ''))
-                model_minimal_fluxes[mid] = (
-                    mdata.get('flux_analysis', {}).get('minimal_media', {}).get('pfba_fluxes', {}))
                 rxn_genes = {}
                 for rxn in mdata.get('reactions', []):
                     gene_rule = rxn.get('gene_reaction_rule', '')
@@ -266,8 +265,15 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                         if genes:
                             rxn_genes[rxn['id']] = genes
                 model_rxn_to_genes[mid] = rxn_genes
-            if model_minimal_fluxes:
-                print(f"Loaded model data for {len(model_minimal_fluxes)} genomes")
+            if model_rxn_to_genes:
+                print(f"Loaded model data for {len(model_rxn_to_genes)} genomes")
+
+        # === Load essential gene IDs for essentiality fraction ===
+        essential_gene_ids = None
+        if essential_genes_file and os.path.exists(essential_genes_file):
+            ess_df = pd.read_csv(essential_genes_file)
+            essential_gene_ids = set(ess_df['locusId'].astype(str))
+            print(f"Loaded {len(essential_gene_ids)} essential gene IDs from {essential_genes_file}")
 
         # Collect phenosim files from user directory and reference directory
         # Each entry: (filepath, genome_id, source)
@@ -444,8 +450,6 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                     gene_pheno_map[gene_id] = {}
                 if cpd_id not in gene_pheno_map[gene_id]:
                     gene_pheno_map[gene_id][cpd_id] = {
-                        "gapfill_reactions": set(),
-                        "model_pred_reactions": set(),
                         "model_pred_fluxes": [],
                         "sources": set()
                     }
@@ -463,13 +467,10 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                     if gene_id:
                         entry = _ensure_gene_pheno(gene_id, cpd_id)
                         entry["sources"].add("gapfill")
-                        entry["gapfill_reactions"].add(rxn_id)
 
-            # Source 2: Model predictions - reactions active in phenotype
-            #           but NOT active in pyruvate minimal media
-            min_fluxes = model_minimal_fluxes.get(genome_id, {})
+            # Source 2: Model predictions - reactions with flux for the phenotype
             rxn_to_genes = model_rxn_to_genes.get(genome_id, {})
-            if min_fluxes and rxn_to_genes:
+            if rxn_to_genes:
                 for cpd_id, pd_entry in phenotype_data.items():
                     pheno_fluxes = pd_entry.get("fluxes", {})
                     if not pheno_fluxes:
@@ -477,21 +478,16 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                     for rxn_id, pheno_flux in pheno_fluxes.items():
                         if abs(pheno_flux) < 1e-6:
                             continue
-                        min_flux = min_fluxes.get(rxn_id, 0)
-                        if abs(min_flux) < 1e-6:
-                            # Active in phenotype, not in minimal media
-                            genes = rxn_to_genes.get(rxn_id, set())
-                            for gene_id in genes:
-                                entry = _ensure_gene_pheno(gene_id, cpd_id)
-                                entry["sources"].add("model_prediction")
-                                entry["model_pred_reactions"].add(rxn_id)
-                                entry["model_pred_fluxes"].append(abs(pheno_flux))
+                        genes = rxn_to_genes.get(rxn_id, set())
+                        for gene_id in genes:
+                            entry = _ensure_gene_pheno(gene_id, cpd_id)
+                            entry["sources"].add("model_prediction")
+                            entry["model_pred_fluxes"].append(abs(pheno_flux))
 
             # Source 3: Fitness data from mapping parquet
             gene_fitness_for_genome = {}  # gene_id -> cpd_id -> {max, min, avg, count}
-            gene_essentiality_for_genome = {}  # gene_id -> {essential_count, total_count}
+            gene_essentiality_fraction = {}  # gene_id -> fraction of mapped fitness genes that are essential
             genes_with_fitness_match = set()  # genes matched to fitness genome clusters
-            genes_with_fitness_data = set()  # genes with actual fitness or essentiality data
             if fitness_mapping_dir and os.path.isdir(fitness_mapping_dir):
                 fitness_parquet = os.path.join(
                     fitness_mapping_dir, f"{genome_id}_fitness.parquet")
@@ -502,22 +498,12 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                     # Extract and remove match-only marker rows
                     match_mask = fitness_df['set_id'] == 'fitness_genome_match'
                     fitness_df = fitness_df[~match_mask]
-                    # Extract essentiality data (set_id == 'essentiality')
-                    ess_mask = fitness_df['set_id'] == 'essentiality'
-                    if ess_mask.any():
-                        ess_df = fitness_df[ess_mask]
-                        ess_agg = (ess_df
-                                   .groupby('feature_id')['value']
-                                   .agg(essential_count='sum', total_count='count')
-                                   .reset_index())
-                        for _, row in ess_agg.iterrows():
-                            gene_essentiality_for_genome[row['feature_id']] = {
-                                'essential_count': int(row['essential_count']),
-                                'total_count': int(row['total_count'])
-                            }
-                        genes_with_fitness_data.update(gene_essentiality_for_genome.keys())
-                        # Remove essentiality rows before fitness processing
-                        fitness_df = fitness_df[~ess_mask]
+                    # Compute essentiality fraction per gene from fitness gene mappings
+                    if essential_gene_ids is not None and not fitness_df.empty:
+                        for fid, grp in fitness_df.groupby('feature_id'):
+                            mapped_genes = set(grp['fitness_feature_id'])
+                            n_essential = sum(1 for g in mapped_genes if g in essential_gene_ids)
+                            gene_essentiality_fraction[fid] = round(n_essential / len(mapped_genes), 6)
                     # Join with condition mapping to get msid (compound ID)
                     if mapping_df is not None and not fitness_df.empty:
                         fitness_with_msid = fitness_df.merge(
@@ -538,11 +524,7 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                                     'avg': row['mean'],
                                     'count': int(row['count'])
                                 }
-                            genes_with_fitness_data.update(gene_fitness_for_genome.keys())
                             print(f"  Loaded fitness data for {len(gene_fitness_for_genome)} genes in {genome_id}")
-                    if gene_essentiality_for_genome:
-                        print(f"  Loaded essentiality data for {len(gene_essentiality_for_genome)} genes in {genome_id}")
-
             # Merge fitness into gene_pheno_map (with threshold gating)
             for gene_id, cpd_fitness in gene_fitness_for_genome.items():
                 for cpd_id, stats in cpd_fitness.items():
@@ -558,6 +540,14 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                         entry = _ensure_gene_pheno(gene_id, cpd_id)
                         entry["sources"].add("fitness")
                         entry["fitness_stats"] = stats
+
+            # Build reverse mapping: gene -> all reactions in the model
+            gene_to_all_reactions = {}
+            for rxn_id, genes in rxn_to_genes.items():
+                for gene_id in genes:
+                    if gene_id not in gene_to_all_reactions:
+                        gene_to_all_reactions[gene_id] = set()
+                    gene_to_all_reactions[gene_id].add(rxn_id)
 
             # Convert gene_pheno_map to Table 3 rows
             for gene_id, pheno_dict in gene_pheno_map.items():
@@ -575,46 +565,34 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                         fitness_min = None
                         fitness_avg = None
                         fitness_count = None
-                    # Apply essentiality overrides based on homolog data:
-                    #   fitness_min = "essential" if at least one homolog is essential
-                    #   fitness_avg = "essential" if majority of homologs are essential
-                    #   fitness_max = "essential" if all homologs are essential
-                    ess = gene_essentiality_for_genome.get(gene_id)
-                    if ess:
-                        ess_count = ess['essential_count']
-                        ess_total = ess['total_count']
-                        if ess_count >= 1:
-                            fitness_min = "essential"
-                        if ess_count > ess_total / 2:
-                            fitness_avg = "essential"
-                        if ess_count == ess_total:
-                            fitness_max = "essential"
                     # Fitness match status column
-                    if gene_id in genes_with_fitness_data:
-                        fitness_match = "matched_with_data"
-                    elif gene_id in genes_with_fitness_match:
-                        fitness_match = "matched_no_data"
+                    has_fitness_score = (gene_id in gene_fitness_for_genome
+                                        and cpd_id in gene_fitness_for_genome[gene_id])
+                    if has_fitness_score:
+                        fitness_match = "has_score"
+                    elif cpd_id not in phenotypes_with_fitness_data:
+                        fitness_match = "no_fitness_data_for_phenotype"
+                    elif gene_id not in genes_with_fitness_match:
+                        fitness_match = "no_fitness_ortholog"
                     else:
-                        fitness_match = "no_match"
-                    # Strip _c0 compartment suffix from reaction IDs
-                    gf_rxns = ";".join(sorted(
-                        r.replace("_c0", "") for r in assoc["gapfill_reactions"]))
+                        fitness_match = "no_score_for_gene_phenotype"
+                    # All reactions associated with this gene in the model
                     mp_rxns = ";".join(sorted(
-                        r.replace("_c0", "") for r in assoc["model_pred_reactions"]))
+                        r.replace("_c0", "") for r in gene_to_all_reactions.get(gene_id, set())))
                     gene_phenotype_rows.append({
                         "genome_id": genome_id,
                         "gene_id": gene_id,
                         "phenotype_id": cpd_id,
                         "phenotype_name": cpd_names.get(cpd_id, cpd_id),
                         "association_sources": ";".join(sorted(assoc["sources"])),
-                        "gapfill_reactions": gf_rxns,
                         "model_pred_reactions": mp_rxns,
                         "model_pred_max_flux": round(max(model_fluxes), 6) if model_fluxes else 0,
                         "fitness_match": fitness_match,
                         "fitness_max": fitness_max,
                         "fitness_min": fitness_min,
                         "fitness_avg": fitness_avg,
-                        "fitness_count": fitness_count
+                        "fitness_count": fitness_count,
+                        "essentiality_fraction": gene_essentiality_fraction.get(gene_id)
                     })
 
         # Add experiment-only genomes to Table 2
@@ -793,7 +771,7 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
         conn.close()
         print(f"Model data added to genome table for {updated_count} genomes in {database_path}")
 
-    def build_model_tables(self, database_path=None, model_path=None):
+    def build_model_tables(self, database_path=None, model_path=None, phenoset_file=None):
         """
         Create genome_reactions table and update feature tables with reaction data.
 
@@ -962,6 +940,44 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                 'minimal_media_class': most_constrained_class(gdata['minimal_classes'])
             })
 
+        # === Build media compositions table ===
+        media_rows = []
+        def _get_cpd_name(cpd_id):
+            try:
+                return self.biochem_db.compounds.get_by_id(cpd_id).name
+            except Exception:
+                return cpd_id
+
+        # KBase workspace media: minimal and rich
+        for media_name, media_label in [("Carbon-Pyruvic-Acid", "minimal"), ("AuxoMedia", "rich")]:
+            try:
+                media_obj = self.get_object(media_name, ws="KBaseMedia")
+                if media_obj:
+                    for mc in media_obj["data"]["mediacompounds"]:
+                        cpd_id = mc["compound_ref"].split("/")[-1]
+                        media_rows.append({
+                            "media_id": media_label,
+                            "compound_id": cpd_id,
+                            "max_uptake": mc["maxFlux"],
+                            "compound_name": _get_cpd_name(cpd_id)
+                        })
+            except Exception as e:
+                print(f"Warning: Could not retrieve KBase media {media_name}: {e}")
+
+        # Phenotype set media formulations
+        if phenoset_file and os.path.exists(phenoset_file):
+            with open(phenoset_file) as f:
+                phenoset_data = json.load(f)
+            for pheno in phenoset_data.get("phenotypes", []):
+                media_id = pheno.get("base_media_name", pheno["id"])
+                for cpd_id, cpd_data in pheno.get("base_media", {}).items():
+                    media_rows.append({
+                        "media_id": media_id,
+                        "compound_id": cpd_id,
+                        "max_uptake": abs(cpd_data.get("lower_bound", 0)),
+                        "compound_name": _get_cpd_name(cpd_id)
+                    })
+
         # TSV output mode
         if database_path is None:
             output_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
@@ -977,6 +993,12 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                 gene_path = os.path.join(output_dir, "gene_reaction_data.tsv")
                 df.to_csv(gene_path, sep='\t', index=False)
                 print(f"Saved gene_reaction_data.tsv with {len(df)} rows to {gene_path}")
+
+            if media_rows:
+                df = pd.DataFrame(media_rows)
+                media_path = os.path.join(output_dir, "media_compositions.tsv")
+                df.to_csv(media_path, sep='\t', index=False)
+                print(f"Saved media_compositions.tsv with {len(df)} rows to {media_path}")
 
             return
 
@@ -1050,6 +1072,11 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
 
             conn.commit()
             print(f"Updated {update_count} rows in {table_name} with reaction data")
+
+        if media_rows:
+            df = pd.DataFrame(media_rows)
+            df.to_sql('media_compositions', conn, if_exists='replace', index=False)
+            print(f"Saved media_compositions table with {len(df)} rows")
 
         conn.close()
         print(f"Model tables built in {database_path}")
@@ -1512,7 +1539,7 @@ def run_model_reconstruction(input_filename, output_filename, classifier_dir,kbv
 
     # Get minimal and rich media for analysis
     minimal_media = gapfill_media  # Use the gapfill media as minimal
-    rich_media = worker_util.get_media("KBaseMedia/Complete")
+    rich_media = worker_util.get_media("KBaseMedia/AuxoMedia")
 
     # Collect gapfilled reactions by category
     core_gf_rxns = []
@@ -1757,7 +1784,7 @@ def generate_ontology_tables(
         # =====================================================================
         # STEP 1: Initialize term collection and load RAST mapper
         # =====================================================================
-        ref_path = Path(reference_data_path) / "berdl_db/run_20250819_020438/parquet_files"
+        ref_path = Path(reference_data_path) / "reference_data/berdl_db/run_20250819_020438/parquet_files"
         seed_json_path = ref_path / "seed.json"
 
         print("\n1. Loading RAST → seed.role mapper...")
