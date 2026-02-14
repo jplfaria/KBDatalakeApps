@@ -152,14 +152,14 @@ def main(params):
     print(f"\nBuilding model tables...")
     kbdl.build_model_tables(model_path=str(results_dir))
 
-    # Step 7: Build BERDL database
-    db_path = output_dir / "berdl_tables.db"
-    print(f"\nBuilding BERDL database: {db_path}")
-    build_berdl_database(
-        str(output_dir),
-        str(db_path),
-        reference_data_path=sdk_config["reference_path"],
-    )
+    # Step 7: Build BERDL database - DO NOT USE THIS CODE - FILIPE IS WRITING THE CODE FOR THIS
+    #db_path = output_dir / "berdl_tables.db"
+    #print(f"\nBuilding BERDL database: {db_path}")
+    #build_berdl_database(
+    #    str(output_dir),
+    #    str(db_path),
+    #    reference_data_path=sdk_config["reference_path"],
+    #)
 
     print(f"\nModel pipeline complete.")
 
