@@ -331,26 +331,27 @@ Author: chenry
         executor = TaskExecutor(max_workers=4)
         path_user_genome = Path(self.shared_folder) / "genome"
         path_user_genome.mkdir(parents=True, exist_ok=True)
-        tasks = []
+        tasks_input_genome = []
+        tasks_input_genome_rast = []
         for filename_faa in os.listdir(str(path_user_genome)):
             if filename_faa.endswith('.faa'):
                 print('found', filename_faa)
                 if skip_annotation:
                     print('skip_annotation')
                 else:
-                    tasks.append(executor.run_task(task_rast,
-                                                   path_user_genome / filename_faa,
-                                                   self.rast_client))
-                    tasks.append(executor.run_task(task_kofam,
-                                                   path_user_genome / filename_faa,
-                                                   self.kb_kofam))
-                    tasks.append(executor.run_task(task_bakta,
-                                                   path_user_genome / filename_faa,
-                                                   self.kb_bakta))
-                    tasks.append(executor.run_task(task_psortb,
-                                                   path_user_genome / filename_faa,
-                                                   '-n',  # FIXME: predict template class first to select proper flag
-                                                   self.kb_psortb))
+                    th = executor.run_task(task_rast, path_user_genome / filename_faa, self.rast_client)
+                    tasks_input_genome_rast.append(th)
+                    tasks_input_genome.append(th)
+                    tasks_input_genome.append(executor.run_task(task_kofam,
+                                                                path_user_genome / filename_faa,
+                                                                self.kb_kofam))
+                    tasks_input_genome.append(executor.run_task(task_bakta,
+                                                                path_user_genome / filename_faa,
+                                                                self.kb_bakta))
+                    tasks_input_genome.append(executor.run_task(task_psortb,
+                                                                path_user_genome / filename_faa,
+                                                                '-n',  # FIXME: predict template class first to select proper flag
+                                                                self.kb_psortb))
 
         path_pangenome = Path(self.shared_folder) / "pangenome"
         path_pangenome.mkdir(parents=True, exist_ok=True)
@@ -406,14 +407,10 @@ Author: chenry
                         print(f'nope {ex}')
                     """
 
-        print('Task barrier input genome annotation')
-        for t in tasks:
+        print('Task barrier input genome annotation RAST')
+        for t in tasks_input_genome_rast:
             print(f'await for {t.args} {t.status}')
             t.wait()
-        for t in tasks:
-            print(t.status)
-            print(t.result)
-            print(t.traceback)
 
         if not skip_modeling_pipeline:
             for input_ref in input_refs:
@@ -433,7 +430,8 @@ Author: chenry
                 # Run model reconstruction
                 model_output_path = path_user_genome / f'{info[1]}_model'
                 classifier_dir = Path('/kb/module/data')
-                run_model_reconstruction(str(genome_tsv_path), str(model_output_path), str(classifier_dir),kbversion=self.util.kb_version)
+                run_model_reconstruction(str(genome_tsv_path), str(model_output_path), str(classifier_dir),
+                                         kbversion=self.util.kb_version)
 
                 # Print head of model output for testing
                 model_data_file = str(model_output_path) + "_data.json"
@@ -446,7 +444,11 @@ Author: chenry
                 # Run phenotype simulation
                 phenotype_output_path = path_user_genome / f'{info[1]}_phenotypes.json'
                 cobra_model_path = str(model_output_path) + "_cobra.json"
-                run_phenotype_simulation(cobra_model_path, str(phenotype_output_path),max_phenotypes=5,kbversion=self.util.kb_version)
+                run_phenotype_simulation(cobra_model_path,
+                                         str(phenotype_output_path),
+                                         data_path='/kb/module/data',
+                                         max_phenotypes=5,
+                                         kbversion=self.util.kb_version)
 
                 # Print head of phenotype output for testing
                 print(f"=== Head of phenotype results: {phenotype_output_path} ===")
@@ -456,11 +458,6 @@ Author: chenry
                 print("=" * 50)
         else:
             print('skip modeling pipeline')
-
-        #t_end_time = time.perf_counter()
-        #print(f"Total Execution time annotation: {t_end_time - t_start_time} seconds")
-
-
 
         # Create KBaseFBA.GenomeDataLakeTables
 
@@ -480,6 +477,15 @@ Author: chenry
         }
 
         # Done with all tasks
+        print('Task barrier input genome annotation')
+        for t in tasks_input_genome:
+            print(f'await for {t.args} {t.status}')
+            t.wait()
+        for t in tasks_input_genome:
+            print(t.status)
+            print(t.result)
+            print(t.traceback)
+
         print('Task barrier')
         for t in tasks_pangeome:
             print(f'await for {t.args} {t.status}')
