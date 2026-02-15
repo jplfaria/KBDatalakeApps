@@ -13,7 +13,11 @@ def main(input_params, selected_clade_member):
     root_pangenome = Path(scratch) / 'pangenome' / selected_clade_member
     paths_pangenome = PathsPangenome(root=root_pangenome)
     paths_root = GenomePaths(root=Path(input_params['_config']['scratch']).resolve())
-    input_genomes = []
+    with open(paths_pangenome.genome_prep_clade_data, 'r') as fh:
+        user_to_clade = json.load(fh)
+        # filter all user genomes that belong to the selected clade member
+        input_genomes = [u for u, c in user_to_clade.items() if c == selected_clade_member]
+    print(f'build table with the following input genomes: {input_genomes}')
     builder = DatalakeTableBuilder(paths_root, paths_pangenome, input_genomes, True, True)
     builder.build()
 
