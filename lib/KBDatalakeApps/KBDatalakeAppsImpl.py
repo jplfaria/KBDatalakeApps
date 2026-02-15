@@ -496,7 +496,7 @@ Author: chenry
 
         # safe to build table all task barrier reached
         print(f'Export tsv tables [models, phenotypes]')
-        self.util.build_model_tables(data_files=str(path_root / 'models'))
+        self.util.build_model_tables(model_path=str(path_root / 'models'))
         self.util.build_phenotype_tables(
             output_dir=str(path_root / 'phenotypes'),
             phenosim_directory=str(path_root / 'phenotypes'),

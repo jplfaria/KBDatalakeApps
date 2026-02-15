@@ -786,10 +786,10 @@ class KBDataLakeUtils(KBGenomeUtils, MSReconstructionUtils, MSFBAUtils):
                         If None, uses self.directory + "/models/"
             data_files: List of data files to process overrides model_path
         """
-        if model_path is None:
-            model_path = os.path.join(self.directory, "models")
-
         if data_files is None:
+            if model_path is None:
+                model_path = os.path.join(self.directory, "models")
+
             # Collect model data files otherwise use the data files provided
             if os.path.isdir(model_path):
                 data_files = [os.path.join(model_path, f)
