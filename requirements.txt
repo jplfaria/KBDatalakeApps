@@ -11,3 +11,4 @@ cobrakbase @ git+https://github.com/cshenry/cobrakbase.git@68444e46fe3b68482da80
 polars==1.37.1
 chemw==0.3.2
 berdl-genomes @ file:///kb/module/berdl
+pyarrow
