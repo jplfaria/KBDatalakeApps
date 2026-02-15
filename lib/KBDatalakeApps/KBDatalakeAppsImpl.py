@@ -361,16 +361,17 @@ Author: chenry
         suffix = params.get('suffix', ctx['token'])
         save_models = params.get('save_models', 0)
         input_genome_to_clade = {}
+        path_root = Path(self.shared_folder)
         if not skip_genome_pipeline:
             self.run_genome_pipeline(input_params.resolve())
-            path_user_to_clade_json = Path(self.shared_folder / 'pangenome' / 'user_to_clade.json')
+            path_user_to_clade_json = path_root / 'pangenome' / 'user_to_clade.json'
             if path_user_to_clade_json.exists():
                 print(f'found input genome pangenome assignments: {path_user_to_clade_json}')
                 with open(path_user_to_clade_json, 'r') as fh:
                     input_genome_to_clade = json.load(fh)
             for genome_ref in genome_refs:
                 info = self.util.get_object_info(genome_ref)
-                path_genome_tsv = Path(self.shared_folder) / "genome" / f'user_{info[1]}_genome.tsv'
+                path_genome_tsv = path_root / "genome" / f'user_{info[1]}_genome.tsv'
                 print(f'create genome tsv: {path_genome_tsv} for {genome_ref}')
                 self.util.run_user_genome_to_tsv(genome_ref, str(path_genome_tsv))
         else:
@@ -381,9 +382,8 @@ Author: chenry
                 clade_to_input_genomes[clade] = set()
             clade_to_input_genomes[clade].add(input_genome)
 
-
         executor = TaskExecutor(max_workers=4)
-        path_user_genome = Path(self.shared_folder) / "genome"
+        path_user_genome = path_root / "genome"
         path_user_genome.mkdir(parents=True, exist_ok=True)
         tasks_input_genome = []
         tasks_input_genome_rast = []
@@ -407,7 +407,7 @@ Author: chenry
                                                                 '-n',  # FIXME: predict template class first to select proper flag
                                                                 self.kb_psortb))
 
-        path_pangenome = Path(self.shared_folder) / "pangenome"
+        path_pangenome = path_root / "pangenome"
         path_pangenome.mkdir(parents=True, exist_ok=True)
         for folder_pangenome in os.listdir(str(path_pangenome)):
             if os.path.isdir(f'{path_pangenome}/{folder_pangenome}'):
@@ -419,13 +419,13 @@ Author: chenry
                     print('skip pangenome')
 
         tasks_pangeome = []
-        path_pangenome = Path(self.shared_folder) / "pangenome"
+        path_pangenome = path_root / "pangenome"
         path_pangenome.mkdir(parents=True, exist_ok=True)
         for folder_pangenome in os.listdir(str(path_pangenome)):
             if os.path.isdir(f'{path_pangenome}/{folder_pangenome}'):
                 print(f'Found pangenome folder: {folder_pangenome}')
                 path_pangenome_members = path_pangenome / folder_pangenome / 'genome'
-                if path_pangenome_members.exists():
+                if path_pangenome_members.exists() and not skip_annotation:
                     for _f in os.listdir(str(path_pangenome_members)):
                         if _f.endswith('.faa'):
                             tasks_pangeome.append(executor.run_task(task_rast,
@@ -448,7 +448,7 @@ Author: chenry
                 "kbversion": self.util.kb_version,
                 "max_phenotypes": None,
             }
-            model_params_file = Path(self.shared_folder) / 'model_pipeline_params.json'
+            model_params_file = path_root / 'model_pipeline_params.json'
             with open(str(model_params_file), 'w') as f:
                 json.dump(model_params, f, indent=2)
             print(f"Wrote model pipeline params: {model_params_file}")
@@ -496,14 +496,14 @@ Author: chenry
 
         # safe to build table all task barrier reached
         print(f'Export tsv tables [models, phenotypes]')
-        self.util.build_model_tables(data_files=str(Path(self.shared_folder / 'models')))
+        self.util.build_model_tables(data_files=str(path_root / 'models'))
         self.util.build_phenotype_tables(
-            output_dir=str(Path(self.shared_folder / 'phenotypes')),
-            phenosim_directory=str(Path(self.shared_folder / 'phenotypes')),
+            output_dir=str(path_root / 'phenotypes'),
+            phenosim_directory=str(path_root / 'phenotypes'),
             experiment_data_file='/kb/module/data/experimental_data.json',
 
-            fitness_mapping_dir=str(Path(self.shared_folder / 'genome')),
-            model_data_dir=str(Path(self.shared_folder / 'models')),
+            fitness_mapping_dir=str(path_root / 'genome'),
+            model_data_dir=str(path_root / 'models'),
 
             fitness_genomes_dir='/data/reference_data/phenotype_data',
             reference_phenosim_dir='/data/reference_data/phenotype_data/phenosims'
@@ -513,18 +513,19 @@ Author: chenry
                 print(f'Build table for pangenome folder: {folder_pangenome}')
                 # run table assembly pipeline for - folder_pangenome
                 self.run_build_table(input_params.resolve(), folder_pangenome)
-                path_db_file = Path(self.shared_folder / 'pangenome' / folder_pangenome / 'db.sqlite')
+                path_db_file = path_root / 'pangenome' / folder_pangenome / 'db.sqlite'
                 generate_ontology_tables(str(path_db_file),
                                          reference_data_path='/data/',
                                          source_tables=[
                                              'user_feature', 'pangenome_feature'
                                          ])
 
-        print_path(Path(self.shared_folder).resolve())
+        print_path(path_root.resolve())
 
         # Safe to read and export data
         file_links = []
         # Zip up shared_folder contents and upload to Shock for downloadable report link
+        """
         shared_folder_path = Path(self.shared_folder)
         if export_all_data:
             self.logger.info(f"Zipping shared folder contents: {shared_folder_path}")
@@ -540,9 +541,10 @@ Author: chenry
                 'label': 'Pipeline Output',
                 'description': 'Zipped archive of all pipeline output files'
             })
+        """
         if export_genome_data:
             archive_shock_id = self.dfu.file_to_shock({
-                'file_path': str(shared_folder_path / 'genome'),
+                'file_path': str(path_root / 'genome'),
                 'pack': 'zip'
             })['shock_id']
             file_links.append({
@@ -553,7 +555,7 @@ Author: chenry
             })
         if export_folder_models:
             archive_shock_id = self.dfu.file_to_shock({
-                'file_path': str(shared_folder_path / 'models'),
+                'file_path': str(path_root / 'models'),
                 'pack': 'zip'
             })['shock_id']
             file_links.append({
@@ -564,7 +566,7 @@ Author: chenry
             })
         if export_folder_phenotypes:
             archive_shock_id = self.dfu.file_to_shock({
-                'file_path': str(shared_folder_path / 'phenotypes'),
+                'file_path': str(path_root / 'phenotypes'),
                 'pack': 'zip'
             })['shock_id']
             file_links.append({
