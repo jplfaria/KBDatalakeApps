@@ -8,7 +8,7 @@
         "tablescanner": {
             "id": "tablescanner",
             "name": "TableScanner Service",
-            "url": "https://appdev.kbase.us/services/berdl_table_scanner",
+            "url": "http://appdev.kbase.us/services/berdl_table_scanner",
             "type": "rest"
         },
         "workspace": {
