@@ -15,6 +15,7 @@ def main(params):
     kbversion = params.get('kbversion', 'appdev')
     max_phenotypes = params.get('max_phenotypes', None)
     input_refs = params['input_refs']
+    print('model_pipeline params:', params)
 
     # Construct SDK config (container paths)
     sdk_config = {
@@ -90,7 +91,7 @@ def main(params):
     for filename_rast in pangenome_dir.glob('**/*' + filename_prefix_rast):
         genome_id = filename_rast.name[:-len(filename_prefix_rast)]  # get genome_id
         print(genome_id, filename_rast)
-        all_tsvs.append(str(filename_rast))
+        all_tsvs.append(Path(filename_rast))
         # build MSGenome
 
     # Step 3: Run model reconstruction in parallel
