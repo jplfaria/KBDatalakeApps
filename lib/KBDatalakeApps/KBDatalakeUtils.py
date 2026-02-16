@@ -1402,7 +1402,7 @@ def run_model_reconstruction2(genome_id: str, genome: MSGenome, output_filename,
             'error': f"No RAST annotations found. Check that the TSV 'functions' column is being read correctly."
         }
 
-    worker_util = MSReconstructionUtils(kbversion=kb_version)
+    worker_util = MSReconstructionUtils(kbversion=kb_version, token=token)
 
     genome_classifier = worker_util.get_classifier(classifier_dir)
 

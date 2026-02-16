@@ -315,7 +315,7 @@ Author: chenry
         with open(path_token, 'w') as fh:
             fh.write(ctx['token'])
         self.util = KBDataLakeUtils(kbendpoint=self.config["kbase-endpoint"], reference_path="/data/",
-                                    module_path="/kb/module")
+                                    module_path="/kb/module",token=ctx['token'])
         self.util.set_token(get_berdl_token(), namespace="berdl")
 
         skip_annotation = params['skip_annotation'] == 1
