@@ -94,6 +94,7 @@ RUN /root/.local/bin/uv pip install --python /opt/env/berdl_genomes --no-progres
 
 # @chenry
 WORKDIR /deps
+RUN echo 'run this'
 RUN git clone https://github.com/cshenry/ModelSEEDpy.git && pip install --use-deprecated=legacy-resolver -e ModelSEEDpy
 RUN echo '0' >/dev/null && cd /deps && \
     git clone https://github.com/cshenry/cobrakbase.git && \
