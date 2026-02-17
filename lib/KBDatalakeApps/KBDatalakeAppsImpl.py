@@ -14,6 +14,7 @@ import pandas as pd
 
 from installed_clients.KBaseReportClient import KBaseReport
 from installed_clients.DataFileUtilClient import DataFileUtil
+from installed_clients.GenomeFileUtilClient import GenomeFileUtil
 from installed_clients.RAST_SDKClient import RAST_SDK
 from installed_clients.kb_baktaClient import kb_bakta
 from installed_clients.kb_psortbClient import kb_psortb
@@ -26,6 +27,7 @@ from annotation.annotation import test_annotation, run_rast, run_kofam
 from executor.task_executor import TaskExecutor
 from executor.task import task_rast, task_kofam, task_psortb, task_bakta
 from KBDatalakeApps.KBDatalakeUtils import KBDataLakeUtils, generate_ontology_tables
+from KBDatalakeApps.utils import upload_blob_file, print_path
 
 # Import KBUtilLib utilities for common functionality
 #from kbutillib import KBWSUtils, KBCallbackUtils, SharedEnvUtils
@@ -34,39 +36,7 @@ from KBDatalakeApps.KBDatalakeUtils import KBDataLakeUtils, generate_ontology_ta
 #    """Custom utility class combining KBUtilLib modules for datalake operations."""
 #    pass
 
-def human_size(size):
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if size < 1024:
-            return f"{size:.1f}{unit}"
-        size /= 1024
-    return f"{size:.1f}PB"
 
-
-def print_path(root: Path):
-    if not root.exists():
-        print(f"{root} does not exist")
-        return
-
-    print(root.name)
-    _print_tree(root, prefix="")
-
-
-def _print_tree(root: Path, prefix: str):
-    # skip folder mmseqs2_tmp
-    if root.name == 'mmseqs2_tmp':
-        return
-    entries = sorted(root.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
-    for i, path in enumerate(entries):
-        is_last = i == len(entries) - 1
-        connector = "└── " if is_last else "├── "
-
-        if path.is_file():
-            size = human_size(path.stat().st_size)
-            print(prefix + connector + f"{path.name} ({size})")
-        else:
-            print(prefix + connector + path.name)
-            extension = "    " if is_last else "│   "
-            _print_tree(path, prefix + extension)
 
 
 def get_berdl_token():
@@ -274,6 +244,7 @@ Author: chenry
 
         # Initialize KBUtilib utilities
         self.dfu = DataFileUtil(self.callback_url)
+        self.gfu = GenomeFileUtil(self.callback_url)
         self.kbase_api = KBaseAPI(os.environ['KB_AUTH_TOKEN'], config=config)
         self.kb_bakta = kb_bakta(self.callback_url, service_ver='beta')
         self.kb_psortb = kb_psortb(self.callback_url, service_ver='beta')
@@ -318,7 +289,7 @@ Author: chenry
                                     module_path="/kb/module",token=ctx['token'],
                                     dfu_client=self.dfu, callback_url=self.callback_url)
         self.util.set_token(get_berdl_token(), namespace="berdl")
-
+        skip_save_genome_annotation = params['skip_save_genome_annotation'] == 1
         skip_annotation = params['skip_annotation'] == 1
         skip_pangenome = params['skip_pangenome'] == 1
         skip_genome_pipeline = params['skip_genome_pipeline'] == 1
@@ -329,6 +300,7 @@ Author: chenry
         export_folder_models = params['export_folder_models'] == 1
         export_folder_phenotypes = params['export_folder_phenotypes'] == 1
         input_refs = params['input_refs']
+        output_object_name = params['output']
 
         input_params = Path(self.shared_folder) / 'input_params.json'
         print(str(input_params.resolve()))
@@ -368,7 +340,7 @@ Author: chenry
 
         workspace_name = params['workspace_name']
 
-        suffix = params.get('suffix', ctx['token'])
+        suffix = params.get('suffix', ctx['token'])  # FIXME: why ctx token ???
         save_models = params.get('save_models', 0)
         input_genome_to_clade = {}
         path_root = Path(self.shared_folder)
@@ -466,22 +438,7 @@ Author: chenry
         else:
             print('skip modeling pipeline')
 
-        # Create KBaseFBA.GenomeDataLakeTables
 
-        output_object = {
-            'name': 'no_name',
-            'description': 'fake',
-            'genomeset_ref': '77057/3/1',
-            'pangenome_data': [{
-                'pangenome_id': 'super_fake',
-                'pangenome_taxonomy': 'alien',
-                'user_genomes': [],
-                'datalake_genomes': [],
-                'sqllite_tables_handle_ref': 'KBH_248173'
-                # Chris sqlite KBH_248173
-                # random e. coli? assembly KBH_248118
-            }],
-        }
 
         # Done with all tasks
         print('Task barrier input genome annotation')
@@ -535,18 +492,19 @@ Author: chenry
         print_path(path_root.resolve())
 
         # Save annotated genomes back to workspace from each clade's database
-        for folder_pangenome in os.listdir(str(path_pangenome)):
-            if os.path.isdir(f'{path_pangenome}/{folder_pangenome}'):
-                path_db_file = path_root / 'pangenome' / folder_pangenome / 'db.sqlite'
-                if path_db_file.exists():
-                    print(f'Saving annotated genomes from {folder_pangenome} database')
-                    self.util.save_annotated_genomes(
-                        genome_refs=list(genome_refs.keys()),
-                        suffix=suffix,
-                        output_workspace=workspace_name,
-                        genomeset_name=f"annotated_genomes_{suffix}",
-                        database_filename=str(path_db_file),
-                    )
+        if not skip_save_genome_annotation:
+            for folder_pangenome in os.listdir(str(path_pangenome)):
+                if os.path.isdir(f'{path_pangenome}/{folder_pangenome}'):
+                    path_db_file = path_root / 'pangenome' / folder_pangenome / 'db.sqlite'
+                    if path_db_file.exists():
+                        print(f'Saving annotated genomes from {folder_pangenome} database')
+                        self.util.save_annotated_genomes(
+                            genome_refs=list(genome_refs.keys()),
+                            suffix=suffix,
+                            output_workspace=workspace_name,
+                            genomeset_name=f"annotated_genomes_{suffix}",
+                            database_filename=str(path_db_file),
+                        )
 
         # Safe to read and export data
         file_links = []
@@ -570,43 +528,46 @@ Author: chenry
         """
         if export_genome_data:
             _file_path = path_root / 'genome'
-            if any(_file_path.iterdir()):
-                archive_shock_id = self.dfu.file_to_shock({
-                    'file_path': str(_file_path),
-                    'pack': 'zip'
-                })['shock_id']
-                file_links.append({
-                    'shock_id': archive_shock_id,
-                    'name': 'input_genomes.zip',
-                    'label': 'Input Genomes Data',
-                    'description': 'Input Genomes with annotation and model files'
-                })
+            if _file_path.exists():
+                if any(_file_path.iterdir()):
+                    archive_shock_id = self.dfu.file_to_shock({
+                        'file_path': str(_file_path),
+                        'pack': 'zip'
+                    })['shock_id']
+                    file_links.append({
+                        'shock_id': archive_shock_id,
+                        'name': 'input_genomes.zip',
+                        'label': 'Input Genomes Data',
+                        'description': 'Input Genomes with annotation and model files'
+                    })
         if export_folder_models:
             _file_path = path_root / 'models'
-            if any(_file_path.iterdir()):
-                archive_shock_id = self.dfu.file_to_shock({
-                    'file_path': str(_file_path),
-                    'pack': 'zip'
-                })['shock_id']
-                file_links.append({
-                    'shock_id': archive_shock_id,
-                    'name': 'models.zip',
-                    'label': 'Models Folder',
-                    'description': 'debug'
-                })
+            if _file_path.exists():
+                if any(_file_path.iterdir()):
+                    archive_shock_id = self.dfu.file_to_shock({
+                        'file_path': str(_file_path),
+                        'pack': 'zip'
+                    })['shock_id']
+                    file_links.append({
+                        'shock_id': archive_shock_id,
+                        'name': 'models.zip',
+                        'label': 'Models Folder',
+                        'description': 'debug'
+                    })
         if export_folder_phenotypes:
             _file_path = path_root / 'phenotypes'
-            if any(_file_path.iterdir()):
-                archive_shock_id = self.dfu.file_to_shock({
-                    'file_path': str(_file_path),
-                    'pack': 'zip'
-                })['shock_id']
-                file_links.append({
-                    'shock_id': archive_shock_id,
-                    'name': 'phenotypes.zip',
-                    'label': 'Phenotypes Folder',
-                    'description': 'debug'
-                })
+            if _file_path.exists():
+                if any(_file_path.iterdir()):
+                    archive_shock_id = self.dfu.file_to_shock({
+                        'file_path': str(_file_path),
+                        'pack': 'zip'
+                    })['shock_id']
+                    file_links.append({
+                        'shock_id': archive_shock_id,
+                        'name': 'phenotypes.zip',
+                        'label': 'Phenotypes Folder',
+                        'description': 'debug'
+                    })
         if export_databases:
             for folder_pangenome in os.listdir(str(path_pangenome)):
                 path_mmseqs_tmp = path_pangenome / folder_pangenome / 'master_mmseqs2' / 'mmseqs2_tmp'
@@ -627,14 +588,42 @@ Author: chenry
                             'description': f'{folder_pangenome} clade database'
                         })
 
-        #saved_object_info = self.kbase_api.save_object('fake_output',
-        #                           params['workspace_name'],
-        #                                   'KBaseFBA.GenomeDataLakeTables',
-        #                                   output_object,
-        #                                   meta={}
-        #)
+        pangenome_data_list = []
+        for folder_pangenome in os.listdir(str(path_pangenome)):
+            if os.path.isdir(f'{path_pangenome}/{folder_pangenome}'):
+                path_db = (path_pangenome / folder_pangenome / 'db.sqlite').resolve()
+                if path_db.exists():
+                    shock_id, handle_id = upload_blob_file(str(path_db),
+                                                           ctx['token'],
+                                                           self.config['shock-url'],
+                                                           self.kbase_api.hs)
+                    # read members.tsv
+                    print(f'upload_blob_file {path_db}: {shock_id} {handle_id}')
+                    pangenome_data = {
+                        'pangenome_id': folder_pangenome,
+                        'pangenome_taxonomy': '',
+                        'user_genomes': [],
+                        'datalake_genomes': [],
+                        'sqllite_tables_handle_ref': handle_id
+                    }
+                    pangenome_data_list.append(pangenome_data)
 
-        #print(saved_object_info)
+        # Create KBaseFBA.GenomeDataLakeTables
+
+        output_object = {
+            'name': output_object_name,
+            'description': '',
+            'genomeset_ref': '77057/3/1',
+            'pangenome_data': pangenome_data_list,
+        }
+        saved_object_info = self.kbase_api.save_object(output_object_name,
+                                                       params['workspace_name'],
+                                                       'KBaseFBA.GenomeDataLakeTables',
+                                                       output_object,
+                                                       meta={}
+        )
+
+        print(saved_object_info)
 
         # Create report with results
         report_client = KBaseReport(self.callback_url)

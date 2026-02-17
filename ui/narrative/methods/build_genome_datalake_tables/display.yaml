@@ -40,6 +40,14 @@ parameters:
             Enter a suffix string that will be appended to the names of the generated
             datalake tables. This helps distinguish different table sets.
 
+    output:
+        ui-name: |
+            Output Object Name
+        short-hint: |
+            out
+        long-hint: |
+            out out
+
     save_models:
         ui-name: |
             Save Generated Models
@@ -123,6 +131,14 @@ parameters:
             Export Phenotypes Folder
         short-hint: |
             Export entire folder
+        long-hint: |
+            x
+
+    skip_save_genome_annotation:
+        ui-name: |
+            Skip Save Genome Annotation
+        short-hint: |
+            x
         long-hint: |
             x
 

@@ -137,7 +137,6 @@ class QueryOntologyLocal(QueryOntologyABC):
 
         return ret
 
-
     def get_protein_ontology_bulk(self, features_or_seqs: list):
         _all_h = set()
         index_to_h = {}

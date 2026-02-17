@@ -45,6 +45,18 @@
             }
         },
         {
+            "id" : "output",
+            "optional" : false,
+            "advanced" : false,
+            "allow_multiple" : false,
+            "default_values" : [ "" ],
+            "field_type" : "text",
+            "text_options" : {
+              "valid_ws_types" : [ "KBaseFBA.GenomeDataLakeTables" ],
+              "is_output_name": true
+            }
+        },
+        {
             "id": "skip_annotation",
             "optional": false,
             "advanced": true,
@@ -82,6 +94,18 @@
         },
         {
             "id": "skip_modeling_pipeline",
+            "optional": false,
+            "advanced": true,
+            "allow_multiple": false,
+            "default_values": ["0"],
+            "field_type": "checkbox",
+            "checkbox_options": {
+                "checked_value": 1,
+                "unchecked_value": 0
+            }
+        },
+        {
+            "id": "skip_save_genome_annotation",
             "optional": false,
             "advanced": true,
             "allow_multiple": false,
@@ -237,6 +261,15 @@
                 {
                     "input_parameter": "export_folder_phenotypes",
                     "target_property": "export_folder_phenotypes",
+                    "target_type_transform": "int"
+                },
+                {
+                    "input_parameter": "output",
+                    "target_property": "output"
+                },
+                {
+                    "input_parameter": "skip_save_genome_annotation",
+                    "target_property": "skip_save_genome_annotation",
                     "target_type_transform": "int"
                 }
             ],

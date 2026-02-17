@@ -10,6 +10,7 @@ from modelseedpy import MSGenome
 from berdl.hash_seq import ProteinSequence
 from pathlib import Path
 import polars as pl
+from berdl.query.query_ontology_local import QueryOntologyLocal
 
 
 def convert_kbase_location(feature_location):
@@ -26,7 +27,8 @@ class DatalakeTableBuilder:
 
     def __init__(self, root_genome: GenomePaths, root_pangenome: PathsPangenome,
                  input_genomes: list,
-                 include_dna_sequence=True, include_protein_sequence=True):
+                 include_dna_sequence=True, include_protein_sequence=True,
+                 export_tables=False):
         self.input_genomes = set(input_genomes)
         self.root_genome = root_genome
         self.root_pangenome = root_pangenome
@@ -37,14 +39,16 @@ class DatalakeTableBuilder:
         self.df_members = pl.read_csv(path_pangenome_members, separator='\t')
         self.filter_genome_ids = {o[0] for o in self.df_members.select("genome_id").rows()}
         self.filter_genome_ids |= self.input_genomes
+        self.export_tables = export_tables
 
     def build(self):
-        #self.build_genome_table()
+        self.build_genome_table()
         self.build_ani_table()
         df_user_features = self.build_user_genome_feature_parquet()
         self.build_user_genome_features_table(df_user_features)
 
         path_genome_dir = self.root_pangenome.genome_dir
+        df_pangenome_features = None
         if path_genome_dir.exists():
             df_pangenome_features = self.build_pangenome_member_feature_parquet()
             self.build_pangenome_genome_features_table(df_pangenome_features)
@@ -54,6 +58,13 @@ class DatalakeTableBuilder:
         self.build_genome_phenotype()
         self.build_gene_phenotype()
 
+        if self.export_tables:
+            path_table_root = self.root_pangenome.root / 'table'
+            path_table_root.mkdir(exist_ok=True)
+            df_user_features.write_parquet(path_table_root / 'user_feature.parquet')
+            if df_pangenome_features is not None:
+                df_pangenome_features.write_parquet(path_table_root / 'pangenome_feature.parquet')
+
         #self.build_user_genome_features_table()
         #self.build_pangenome_genome_features_table()
          #self.build_phenotype_kegg_table()
@@ -62,20 +73,89 @@ class DatalakeTableBuilder:
         #
 
     def build_genome_table(self):
+        table_name = 'genome'
         conn = sqlite3.connect(str(self.root_pangenome.out_sqlite3_file))
         cur = conn.cursor()
-        cur.execute("""
-                CREATE TABLE IF NOT EXISTS genome (
-
+        cur.execute(f"DROP TABLE IF EXISTS {table_name};")
+        cur.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
                     genome TEXT NOT NULL,
-                    gtdb_taxonomy TEXT NOT NULL,
-                    ncbi_taxonomy TEXT NOT NULL,
-                    n_contigs INT NOT NULL,
-                    n_features INT NOT NULL,
-                    PRIMARY KEY genome
+                    gtdb_taxonomy TEXT,
+                    ncbi_taxonomy TEXT,
+                    ncbi_taxid INT,
+                    checkm_completeness REAL,
+                    checkm_contamination REAL,
+                    size INT,
+                    kind TEXT NOT NULL,
+                    PRIMARY KEY (genome)
                 );
                 """)
-        pass
+
+        clade_ids = set()
+        member_ids = {o[0] for o in self.df_members.select("genome_id").rows()}
+        with open(self.root_genome.ani_kepangenomes_json, 'r') as fh:
+            clades = json.load(fh)
+        for _, v in clades.items():
+            clade_ids |= set(v)
+
+        gtdb_ids = clade_ids | member_ids
+        print(gtdb_ids)
+
+        path_gtdb_ar = Path('/data/reference_data/gtdb/ar53_metadata_r214.tsv')
+        path_gtdb_bac = Path('/data/reference_data/gtdb/bac120_metadata_r214.tsv')
+        if path_gtdb_bac.exists() and path_gtdb_ar.exists():
+            ldf_gtdb_metadata = pl.scan_csv([path_gtdb_ar, path_gtdb_bac], separator='\t')
+            res = ldf_gtdb_metadata.filter(pl.col("accession").is_in(gtdb_ids)).select(
+                pl.col("accession").alias("genome"),
+                pl.col("gtdb_taxonomy"),
+                pl.col("ncbi_taxonomy"),
+                pl.col("ncbi_taxid"),
+                pl.col("checkm_completeness"),
+                pl.col("checkm_contamination"),
+                pl.when(pl.col("accession").is_in(member_ids)).then(
+                    pl.lit("clade_member")).otherwise(pl.lit("clade")).alias("kind"),
+                #  pl.col("gc_count"),
+                #  pl.col("gc_percentage"),
+                #  pl.col("l50_contigs"),
+                #  pl.col("l50_scaffolds"),
+                #  pl.col("longest_contig"),
+                #  pl.col("longest_scaffold"),
+                pl.col("genome_size").alias("size"),
+
+            ).collect()
+
+            #print(res)
+
+            res.to_pandas().to_sql(table_name, conn, if_exists="append", index=False)
+        else:
+            print("error: gtdb metadata not found unable to add pangenome members data")
+
+        _data_input_genomes = {
+            'genome': [],
+            'gtdb_taxonomy': [],
+            'ncbi_taxonomy': [],
+            'ncbi_taxid': [],
+            'checkm_completeness': [],
+            'checkm_contamination': [],
+            'size': [],
+            'kind': [],
+        }
+
+        for input_genome in self.input_genomes:
+            _data_input_genomes['genome'].append(input_genome)
+            _data_input_genomes['gtdb_taxonomy'].append(None)
+            _data_input_genomes['ncbi_taxonomy'].append(None)
+            _data_input_genomes['ncbi_taxid'].append(None)
+            _data_input_genomes['checkm_completeness'].append(None)
+            _data_input_genomes['checkm_contamination'].append(None)
+            _data_input_genomes['size'].append(None)
+            _data_input_genomes['kind'].append('user')
+
+        pl.DataFrame(_data_input_genomes).to_pandas().to_sql(
+            table_name, conn, if_exists="append", index=False)
+
+        conn.commit()
+        conn.close()
 
     @staticmethod
     def _update_ontology(feature_ontology_terms, df):
@@ -95,7 +175,9 @@ class DatalakeTableBuilder:
                     if ontology_term not in feature_ontology_terms[feature_id]:
                         feature_ontology_terms[feature_id][ontology_term] = set()
                     for value in values.split('; '):
-                        feature_ontology_terms[feature_id][ontology_term].add(value)
+                        feature_ontology_terms[feature_id][ontology_term].add(
+                            QueryOntologyLocal.clean_bakta_value(
+                                ontology_term, value))  # nasty hack to clean KEGG:, COG:, uniref prefix
 
     def collect_annotation(self, genome_id: str, genome_root: Path):
         """
@@ -438,14 +520,15 @@ class DatalakeTableBuilder:
         cur.execute(sql_create_table)
 
         path_to_data = self.root_genome.root / 'phenotypes' / 'genome_phenotypes.tsv'
-        ldf = pl.scan_csv(path_to_data, separator='\t')
-        genome_ids = set(
-            ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
-        excluded = genome_ids - self.filter_genome_ids
-        print('genome_phenotype excluded', excluded)
+        if path_to_data.exists():
+            ldf = pl.scan_csv(path_to_data, separator='\t')
+            genome_ids = set(
+                ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
+            excluded = genome_ids - self.filter_genome_ids
+            print('genome_phenotype excluded', excluded)
 
-        df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
-        df_filter.to_pandas().to_sql("genome_phenotype", conn, if_exists="append", index=False)
+            df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
+            df_filter.to_pandas().to_sql("genome_phenotype", conn, if_exists="append", index=False)
 
         conn.commit()
         conn.close()
@@ -476,14 +559,15 @@ class DatalakeTableBuilder:
         cur.execute(sql_create_table)
 
         path_to_data = self.root_genome.root / 'phenotypes' / 'gene_phenotypes.tsv'
-        ldf = pl.scan_csv(path_to_data, separator='\t')
-        genome_ids = set(
-            ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
-        excluded = genome_ids - self.filter_genome_ids
-        print('gene_phenotype excluded', excluded)
+        if path_to_data.exists():
+            ldf = pl.scan_csv(path_to_data, separator='\t')
+            genome_ids = set(
+                ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
+            excluded = genome_ids - self.filter_genome_ids
+            print('gene_phenotype excluded', excluded)
 
-        df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
-        df_filter.to_pandas().to_sql("gene_phenotype", conn, if_exists="append", index=False)
+            df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
+            df_filter.to_pandas().to_sql("gene_phenotype", conn, if_exists="append", index=False)
 
         conn.commit()
         conn.close()
@@ -508,14 +592,15 @@ class DatalakeTableBuilder:
         cur.execute(sql_create_table)
 
         path_to_data = self.root_genome.root / 'models' / 'gene_reaction_data.tsv'
-        ldf = pl.scan_csv(path_to_data, separator='\t')
-        genome_ids = set(
-            ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
-        excluded = genome_ids - self.filter_genome_ids
-        print(f'{table_name} excluded: {excluded}')
+        if path_to_data.exists():
+            ldf = pl.scan_csv(path_to_data, separator='\t')
+            genome_ids = set(
+                ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
+            excluded = genome_ids - self.filter_genome_ids
+            print(f'{table_name} excluded: {excluded}')
 
-        df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
-        df_filter.to_pandas().to_sql(table_name, conn, if_exists="append", index=False)
+            df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
+            df_filter.to_pandas().to_sql(table_name, conn, if_exists="append", index=False)
 
         conn.commit()
         conn.close()
@@ -545,14 +630,15 @@ class DatalakeTableBuilder:
         cur.execute(sql_create_table)
 
         path_data = self.root_genome.root / 'models' / 'genome_reactions.tsv'
-        ldf = pl.scan_csv(path_data, separator='\t')
-        genome_ids = set(
-            ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
-        excluded = genome_ids - self.filter_genome_ids
-        print('genome_reaction excluded', excluded)
+        if path_data.exists():
+            ldf = pl.scan_csv(path_data, separator='\t')
+            genome_ids = set(
+                ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
+            excluded = genome_ids - self.filter_genome_ids
+            print('genome_reaction excluded', excluded)
 
-        df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
-        df_filter.to_pandas().to_sql("genome_reaction", conn, if_exists="append", index=False)
+            df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
+            df_filter.to_pandas().to_sql("genome_reaction", conn, if_exists="append", index=False)
 
         conn.commit()
         conn.close()
@@ -583,14 +669,15 @@ class DatalakeTableBuilder:
         cur.execute(sql_create_table)
 
         path_data = self.root_genome.root / 'phenotypes' / 'model_performance.tsv'
-        ldf = pl.scan_csv(path_data, separator='\t')
-        genome_ids = set(
-            ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
-        excluded = genome_ids - self.filter_genome_ids
-        print('model_performance excluded', excluded)
+        if path_data.exists():
+            ldf = pl.scan_csv(path_data, separator='\t')
+            genome_ids = set(
+                ldf.select("genome_id").unique().collect().get_column("genome_id").to_list())
+            excluded = genome_ids - self.filter_genome_ids
+            print('model_performance excluded', excluded)
 
-        df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
-        df_filter.to_pandas().to_sql("model_performance", conn, if_exists="append", index=False)
+            df_filter = ldf.filter(pl.col("genome_id").is_in(self.filter_genome_ids)).collect()
+            df_filter.to_pandas().to_sql("model_performance", conn, if_exists="append", index=False)
 
         conn.commit()
         conn.close()
@@ -612,8 +699,9 @@ class DatalakeTableBuilder:
         cur.execute(sql_create_table)
 
         path_data = self.root_genome.root / 'models' / 'media_compositions.tsv'
-        pl.read_csv(path_data, separator='\t').to_pandas().to_sql(
-            "media_composition", conn, if_exists="append", index=False)
+        if path_data.exists():
+            pl.read_csv(path_data, separator='\t').to_pandas().to_sql(
+                "media_composition", conn, if_exists="append", index=False)
 
         conn.commit()
         conn.close()
