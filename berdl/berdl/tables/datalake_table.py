@@ -296,10 +296,11 @@ class DatalakeTableBuilder:
         for path_genome_faa in faa_to_process:
             genome_id = path_genome_faa.name[:-4]  # strip user_<genome_id>.faa
             path_genome_tsv = input_genome_dir / f'{genome_id}_genome.tsv'
-            path_genome_pangenome_profile = input_genome_dir / f'user_{genome_id}_pangenome_profile.tsv'
+            path_genome_pangenome_profile = input_genome_dir / f'{genome_id}_pangenome_profile.tsv'
             if path_genome_tsv.exists():
                 d_pangenome_profile = {}
                 if path_genome_pangenome_profile.exists():
+                    print(f'found pangenome profile: {path_genome_pangenome_profile}')
                     d_pangenome_profile = {row['feature_id']: row for row in
                                            pl.read_csv(path_genome_pangenome_profile, separator='\t').rows(
                                                named=True)}
