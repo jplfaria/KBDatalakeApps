@@ -134,6 +134,14 @@ parameters:
         long-hint: |
             x
 
+    skip_save_genome_annotation:
+        ui-name: |
+            Skip
+        short-hint: |
+            x
+        long-hint: |
+            x
+
     export_all_content:
         ui-name: |
             Expert entire workdir content

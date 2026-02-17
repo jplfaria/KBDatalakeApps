@@ -105,6 +105,18 @@
             }
         },
         {
+            "id": "skip_save_genome_annotation",
+            "optional": false,
+            "advanced": true,
+            "allow_multiple": false,
+            "default_values": ["0"],
+            "field_type": "checkbox",
+            "checkbox_options": {
+                "checked_value": 1,
+                "unchecked_value": 0
+            }
+        },
+        {
             "id": "export_genome_data",
             "optional": false,
             "advanced": true,
@@ -254,6 +266,11 @@
                 {
                     "input_parameter": "output",
                     "target_property": "output"
+                },
+                {
+                    "input_parameter": "skip_save_genome_annotation",
+                    "target_property": "skip_save_genome_annotation",
+                    "target_type_transform": "int"
                 }
             ],
             "output_mapping": [
