@@ -14,6 +14,7 @@ import pandas as pd
 
 from installed_clients.KBaseReportClient import KBaseReport
 from installed_clients.DataFileUtilClient import DataFileUtil
+from installed_clients.GenomeFileUtilClient import GenomeFileUtil
 from installed_clients.RAST_SDKClient import RAST_SDK
 from installed_clients.kb_baktaClient import kb_bakta
 from installed_clients.kb_psortbClient import kb_psortb
@@ -243,6 +244,7 @@ Author: chenry
 
         # Initialize KBUtilib utilities
         self.dfu = DataFileUtil(self.callback_url)
+        self.gfu = GenomeFileUtil(self.callback_url)
         self.kbase_api = KBaseAPI(os.environ['KB_AUTH_TOKEN'], config=config)
         self.kb_bakta = kb_bakta(self.callback_url, service_ver='beta')
         self.kb_psortb = kb_psortb(self.callback_url, service_ver='beta')
