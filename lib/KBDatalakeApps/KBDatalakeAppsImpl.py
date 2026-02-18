@@ -328,9 +328,6 @@ Author: chenry
 
             fh.write(json.dumps(_params))
 
-        #print(os.environ)
-        #print('ctx', ctx)
-        #print('contig', self.config)
         if DEBUG_MODE:
             print('data dir')
             print(os.listdir('/data'))

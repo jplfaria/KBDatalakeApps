@@ -185,8 +185,11 @@ class BERDLPreGenome:
                 top_matches[clade] = best_genome
 
             return top_matches
-
-        ani_clades = self.ani_translate_clade(df_ani_clade, assembly_to_user_id)
+        
+        if df_ani_clade is None:
+            ani_clades = {}
+        else:
+            ani_clades = self.ani_translate_clade(df_ani_clade, assembly_to_user_id)
         user_to_clade = match_top_clade(ani_clades)
 
         with open(self.paths.json_user_to_clade, 'w') as fh:
