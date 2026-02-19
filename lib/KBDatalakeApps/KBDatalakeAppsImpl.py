@@ -428,7 +428,8 @@ Author: chenry
                 for filename_faa in path_user_genome.iterdir():
                     if str(filename_faa).endswith('.faa'):
                         print(f'found faa {filename_faa}')
-                        filename_faa_rast = Path(filename_faa.stem + '_rast.tsv')
+                        filename_faa_rast = path_user_genome / (filename_faa.stem + '_rast.tsv')
+                        print(f'looking for {filename_faa_rast}')
                         if filename_faa_rast.exists():
                             print(f'found {filename_faa} with RAST: {filename_faa_rast}')
                             genome = read_rast_as_genome(filename_faa_rast)
