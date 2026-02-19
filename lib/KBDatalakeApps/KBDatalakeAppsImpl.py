@@ -7,11 +7,8 @@ import uuid
 from pathlib import Path
 import shutil
 import subprocess
-import time
 import polars as pl
-import cobra
 import pandas as pd
-
 from installed_clients.KBaseReportClient import KBaseReport
 from installed_clients.DataFileUtilClient import DataFileUtil
 from installed_clients.GenomeFileUtilClient import GenomeFileUtil
@@ -19,8 +16,6 @@ from installed_clients.RAST_SDKClient import RAST_SDK
 from installed_clients.kb_baktaClient import kb_bakta
 from installed_clients.kb_psortbClient import kb_psortb
 from installed_clients.kb_kofamClient import kb_kofam
-from modelseedpy import MSModelUtil
-from modelseedpy.core.msgenome import MSGenome, MSFeature
 from cobrakbase import KBaseAPI
 from cobrakbase.AbstractHandleClient import AbstractHandle as HandleService
 from installed_clients.baseclient import ServerError
@@ -31,14 +26,8 @@ from KBDatalakeApps.KBDatalakeUtils import KBDataLakeUtils, generate_ontology_ta
 from KBDatalakeApps.utils import upload_blob_file, print_path, get_classifier, read_rast_as_genome
 from KBDatalakeApps.utils import input_refs_to_genome_refs, validate_genome_refs
 
-# Import KBUtilLib utilities for common functionality
-#from kbutillib import KBWSUtils, KBCallbackUtils, SharedEnvUtils
 
-#class DatalakeAppUtils(KBWSUtils, KBCallbackUtils, SharedEnvUtils):
-#    """Custom utility class combining KBUtilLib modules for datalake operations."""
-#    pass
-
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 
 def get_berdl_token():
@@ -176,44 +165,7 @@ Author: chenry
             raise RuntimeError(
                 f"model pipeline failed with exit code {ret}"
             )
-
-    @staticmethod
-    def run_RAST_annotation(input_filepath, output_filename, rast_client):
-        sequence_hash = {}
-        current_id = None
-        current_seq = []
-        with open(input_filepath) as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith(">"):
-                    if current_id:
-                        sequence_hash[current_id] = "".join(current_seq)
-                    current_id = line[1:].split()[0]
-                    current_seq = []
-                elif line:
-                    current_seq.append(line)
-        if current_id:
-            sequence_hash[current_id] = "".join(current_seq)
-        proteins = []
-        ids = []
-        for id, sequence in sequence_hash.items():
-            proteins.append(sequence)
-            ids.append(id)
-
-        annotate_protein_params = {'proteins': proteins}
-        print('annotate_protein_params:', annotate_protein_params)
-
-        result = rast_client.annotate_proteins(annotate_protein_params)
-        print('rast annotation result', result)
-        functions_list = result.get('functions', [])
-        records = []
-        for id, functions in zip(ids, functions_list):
-            records.append({
-                'id': id,
-                'functions': functions
-            })
-        df = pd.DataFrame.from_records(records)
-        df.to_csv(output_filename, sep='\t', index=False)
+    
     #END_CLASS_HEADER
 
     # config contains contents of config file in a hash or None if it couldn't
@@ -431,12 +383,15 @@ Author: chenry
             print(f'await for {t.args} {t.status}')
             t.wait()
 
+        
         if not skip_annotation:
             template_classifier = get_classifier()
             print(f'loaded classifier {template_classifier}')
             if template_classifier is not None:
+                input_genome_class = {}
                 for filename_faa in path_user_genome.iterdir():
-                    if str(filename_faa).endswith('.faa'):
+                    genome_name = filename_faa.stem
+                    if str(filename_faa).endswith('.faa') and genome_name in genome_allowed:
                         print(f'found faa {filename_faa}')
                         filename_faa_rast = path_user_genome / (filename_faa.stem + '_rast.tsv')
                         print(f'looking for {filename_faa_rast}')
@@ -444,12 +399,24 @@ Author: chenry
                             print(f'found {filename_faa} with RAST: {filename_faa_rast}')
                             genome = read_rast_as_genome(filename_faa_rast, None)
                             res = template_classifier.classify(genome)
+                            input_genome_class[genome_name] = res
                             messages.append(f'Genome Type Class: {filename_faa} -> {res}')
                             print(filename_faa, res)
+                            psortb_org_param = '-n'
+                            if res == 'P':
+                                psortb_org_param = '-p'
+                            elif res == 'A':
+                                psortb_org_param = '-a'
                             tasks_input_genome.append(executor.run_task(task_psortb,
                                                                         path_user_genome / filename_faa,
-                                                                        '-n',  # FIXME: predict template class first to select proper flag
+                                                                        psortb_org_param,
                                                                         self.kb_psortb))
+                with open(path_user_genome / 'genome_class.tsv', 'w') as fh:
+                    h = ["genome_ref", "genome_name", "modelseed_class"]
+                    fh.write("\t".join(h) + '\n')
+                    for genome_ref, genome_name in genome_refs.items():
+                        line = [genome_ref, genome_name, input_genome_class.get(genome_name, '?')]
+                        fh.write("\t".join(line) + '\n')
 
         if not skip_modeling_pipeline:
             model_params = {
