@@ -442,7 +442,7 @@ Author: chenry
                         print(f'looking for {filename_faa_rast}')
                         if filename_faa_rast.exists():
                             print(f'found {filename_faa} with RAST: {filename_faa_rast}')
-                            genome = read_rast_as_genome(filename_faa_rast)
+                            genome = read_rast_as_genome(filename_faa_rast, None)
                             res = template_classifier.classify(genome)
                             messages.append(f'Genome Type Class: {filename_faa} -> {res}')
                             print(filename_faa, res)
