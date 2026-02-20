@@ -8,12 +8,14 @@
         "tablescanner": {
             "id": "tablescanner",
             "name": "TableScanner Service",
+            "description": "Note: The origin (appdev.kbase.us) is dynamically replaced with window.location.origin in production (KBase domains). This URL acts as a fallback for local development.",
             "url": "https://appdev.kbase.us/services/berdl_table_scanner",
             "type": "rest"
         },
         "workspace": {
             "id": "workspace",
             "name": "KBase Workspace",
+            "description": "Note: The origin (appdev.kbase.us) is dynamically replaced with window.location.origin in production (KBase domains). This URL acts as a fallback for local development.",
             "url": "https://appdev.kbase.us/services/ws",
             "type": "rest"
         }
@@ -27,7 +29,6 @@
         "theme": "system",
         "density": "normal",
         "showRowNumbers": true,
-        "defaultSource": "76990/7/2",
         "autoLoad": false,
         "locale": "en-US",
         "dateFormat": "YYYY-MM-DD",
