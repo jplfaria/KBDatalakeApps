@@ -8,15 +8,15 @@
         "tablescanner": {
             "id": "tablescanner",
             "name": "TableScanner Service",
-            "description": "Note: The origin (appdev.kbase.us) is dynamically replaced with window.location.origin in production (KBase domains). This URL acts as a fallback for local development.",
-            "url": "https://appdev.kbase.us/services/berdl_table_scanner",
+            "description": "Production API endpoint. Note: The URLs are dynamically configured to route correctly whether running in AppDev or Prod KBase environments.",
+            "url": "https://berdl.kbase.us/apis/dev_tablescanner",
             "type": "rest"
         },
         "workspace": {
             "id": "workspace",
             "name": "KBase Workspace",
-            "description": "Note: The origin (appdev.kbase.us) is dynamically replaced with window.location.origin in production (KBase domains). This URL acts as a fallback for local development.",
-            "url": "https://appdev.kbase.us/services/ws",
+            "description": "Production Workspace endpoint. Note: The origin is dynamically configured to route correctly whether running in AppDev or Prod KBase environments.",
+            "url": "https://kbase.us/services/ws",
             "type": "rest"
         }
     },
