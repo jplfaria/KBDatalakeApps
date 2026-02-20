@@ -252,12 +252,15 @@ class BERDLPangenome:
         if filename_ani_members.exists():
             df_members_ani = _read_search_output_as_parquet(filename_ani_members)
         if df_members_ani is not None:
-            assembly_to_user_id = {}
-            with open(filename_library_input_genomes, 'r') as fh:
-                for line in fh.read().split('\n'):
-                    _filename = line.split('/')[-1]
-                    assembly_to_user_id[_filename] = _filename[:-4]
-            ani_members = BERDLPreGenome.ani_translate_clade(df_members_ani, assembly_to_user_id)
+            df_members_ani = df_members_ani.to_pandas()
+
+            def q_transform(s):
+                return s.split('/')[-1][:-4]
+
+            def r_transform(s):
+                return s.split('/')[-1][:-4]
+
+            ani_members = BERDLPreGenome.ani_transform(df_members_ani, q_transform, r_transform)
             filename_ani_members_json = self.paths.root / 'ani_members.json'
             with open(filename_ani_members_json, 'w') as fh:
                 fh.write(json.dumps(ani_members))

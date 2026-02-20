@@ -214,16 +214,15 @@ class DatalakeTableBuilder:
             PRIMARY KEY (genome1, genome2)
         );
         """)
+        ani_rows = {}
         if self.root_genome.ani_kepangenomes_json.exists():
             with open(self.root_genome.ani_kepangenomes_json) as fh:
                 data_ani_clade = json.load(fh)
             for genome_user, ani_matches in data_ani_clade.items():
                 if f'user_{genome_user}' in self.input_genomes:
                     for genome_ani, (ani, af1, af2) in ani_matches.items():
-                        cur.execute(
-                            "INSERT INTO ani (genome1, genome2, ani, af1, af2) VALUES (?, ?, ?, ?, ?)",
-                            (f'user_{genome_user}', genome_ani, ani, af1, af2)
-                        )
+                        pk = (f'user_{genome_user}', genome_ani)
+                        ani_rows[pk] = (ani, af1, af2)
 
         if self.root_genome.ani_fitness_json.exists():
             with open(self.root_genome.ani_fitness_json) as fh:
@@ -231,10 +230,8 @@ class DatalakeTableBuilder:
             for genome_user, ani_matches in data_ani_fitness.items():
                 if f'user_{genome_user}' in self.input_genomes:
                     for genome_ani, (ani, af1, af2) in ani_matches.items():
-                        cur.execute(
-                            "INSERT INTO ani (genome1, genome2, ani, af1, af2) VALUES (?, ?, ?, ?, ?)",
-                            (f'user_{genome_user}', genome_ani, ani, af1, af2)
-                        )
+                        pk = (f'user_{genome_user}', genome_ani)
+                        ani_rows[pk] = (ani, af1, af2)
 
         if self.root_genome.ani_phenotypes_json.exists():
             with open(self.root_genome.ani_phenotypes_json) as fh:
@@ -242,10 +239,26 @@ class DatalakeTableBuilder:
             for genome_user, ani_matches in data_ani_phenotypes.items():
                 if f'user_{genome_user}' in self.input_genomes:
                     for genome_ani, (ani, af1, af2) in ani_matches.items():
-                        cur.execute(
-                            "INSERT INTO ani (genome1, genome2, ani, af1, af2) VALUES (?, ?, ?, ?, ?)",
-                            (f'user_{genome_user}', genome_ani, ani, af1, af2)
-                        )
+                        pk = (f'user_{genome_user}', genome_ani)
+                        ani_rows[pk] = (ani, af1, af2)
+
+        path_ani_members_json = self.root_pangenome.root / 'ani_members.json'
+        if path_ani_members_json.exists():
+            with open(path_ani_members_json) as fh:
+                data_ani = json.load(fh)
+                for genome_user, ani_matches in data_ani.items():
+                    for genome_ani, (ani, af1, af2) in ani_matches.items():
+                        pk = (genome_user, genome_ani)
+                        if pk not in ani_rows:
+                            ani_rows[pk] = (ani, af1, af2)
+                        else:
+                            print(f'skip ani pair previously added: {pk}')
+
+        for (genome_user, genome_ani), (ani, af1, af2) in ani_rows.items():
+            cur.execute(
+                "INSERT INTO ani (genome1, genome2, ani, af1, af2) VALUES (?, ?, ?, ?, ?)",
+                (f'{genome_user}', genome_ani, ani, af1, af2)
+            )
 
         conn.commit()
         conn.close()
