@@ -31,9 +31,10 @@ class BERDLPangenome:
         print(f'pangenome members # unique proteins: {len(u_proteins)}')
 
         print(f"write master faa")
-        genome_master_faa = MSGenome()
-        genome_master_faa.add_features(list(u_proteins.values()))
-        genome_master_faa.to_fasta(str(self.paths.out_master_faa_pangenome_members))
+        if len(u_proteins) > 0:
+            genome_master_faa = MSGenome()
+            genome_master_faa.add_features(list(u_proteins.values()))
+            genome_master_faa.to_fasta(str(self.paths.out_master_faa_pangenome_members))
 
         #  collect user genome and add to u_proteins
         with open(self.paths.genome_prep_clade_data, 'r') as fh:
@@ -150,7 +151,37 @@ class BERDLPangenome:
 
         print("mmseqs2 completed")
 
-    def run(self, selected_clade_member_id):
+    def run_no_clade(self) -> None:
+        # build master protein user_genome + pangenome
+        if not self.paths.out_master_faa_pangenome_members.exists() or not self.paths.out_master_faa.exists():
+            self.write_master_faa(dict(), 'none')
+
+        filename_clusters = self.paths.out_mmseqs_dir / f'{self.paths.out_master_faa.name[:-4]}_cluster.tsv'
+        # run mmseqs
+        if not filename_clusters.exists():
+            self.mmseqs2(self.paths.out_master_faa)
+
+        r_to_m, m_to_r = self.read_cluster_tsv(filename_clusters)
+
+        with open(self.paths.genome_prep_clade_data, 'r') as fh:
+            user_to_clade = {f'user_{k}.faa' for k, v in json.load(fh).items() if v == 'none'}
+
+        # map cluster to fitness
+        m_to_fitness_feature, all_fitness_genome_hashes = map_protein_hash_to_fitness_records()
+        for filename in user_to_clade:
+            path_input_genomes = (self.paths.root / '../..' / 'genome').resolve()
+            path_genome_faa = path_input_genomes / filename
+            input_genome = MSGenome.from_fasta(str(path_genome_faa))
+            input_genome_id = path_genome_faa.name[:-4]
+            df_input_genome_fitness = create_genome_fitness_table(input_genome, input_genome_id, m_to_r, r_to_m,
+                                                                  m_to_fitness_feature,
+                                                                  all_fitness_genome_hashes)
+            df_input_genome_fitness.write_parquet(path_input_genomes / f'{input_genome_id}_fitness.parquet')
+
+    def run(self, selected_clade_member_id) -> None:
+        if selected_clade_member_id == 'none':
+            return self.run_no_clade()
+
         clade_id = self.pg.get_member_representative(selected_clade_member_id)
         print('clade_id', clade_id)
         clade_members = self.pg.get_clade_members(clade_id)

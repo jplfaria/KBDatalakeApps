@@ -181,6 +181,14 @@ class BERDLPreGenome:
         with open(self.paths.json_user_to_clade, 'w') as fh:
             fh.write(json.dumps(user_to_clade))
 
+        no_clade = set()
+        for genome_id in user_genome_files:
+            if genome_id not in user_to_clade:
+                no_clade.add(genome_id)
+        if len(no_clade) > 0:
+            for genome_id in no_clade:
+                user_to_clade[genome_id] = 'none'
+
         ani_fitness = None
         if df_ani_fitness is not None:
             ani_fitness = self.ani_translate_fitness(df_ani_fitness, assembly_to_user_id)
@@ -201,18 +209,19 @@ class BERDLPreGenome:
             clade_to_genomes[clade].add(genome)
 
         for clade in clade_to_genomes:
-            path_to_pangenome = self.paths.pangenome_dir / clade
-            path_to_pangenome.mkdir(exist_ok=True)
-            path_to_pangenome_library = path_to_pangenome / 'library'
-            path_to_pangenome_library.mkdir(exist_ok=True)
-            path_to_pangenome_library_input_genomes = path_to_pangenome_library / 'input_genomes.txt'
-            if not path_to_pangenome_library_input_genomes.exists():
-                with open(path_to_pangenome_library_input_genomes, 'w') as fh:
-                    for genome in clade_to_genomes[clade]:
-                        file_assembly_name = user_genome_files[genome][0]
-                        p = self.paths.assembly_dir / file_assembly_name
-                        print(p, p.exists())
-                        if p.exists():
-                            fh.write(str(p.resolve()) + '\n')
+            if clade != 'none':
+                path_to_pangenome = self.paths.pangenome_dir / clade
+                path_to_pangenome.mkdir(exist_ok=True)
+                path_to_pangenome_library = path_to_pangenome / 'library'
+                path_to_pangenome_library.mkdir(exist_ok=True)
+                path_to_pangenome_library_input_genomes = path_to_pangenome_library / 'input_genomes.txt'
+                if not path_to_pangenome_library_input_genomes.exists():
+                    with open(path_to_pangenome_library_input_genomes, 'w') as fh:
+                        for genome in clade_to_genomes[clade]:
+                            file_assembly_name = user_genome_files[genome][0]
+                            p = self.paths.assembly_dir / file_assembly_name
+                            print(p, p.exists())
+                            if p.exists():
+                                fh.write(str(p.resolve()) + '\n')
         
         return user_genome_files, user_to_clade, ani_clades, ani_fitness, ani_phenotype
