@@ -179,9 +179,6 @@ class BERDLPreGenome:
             ani_clades = self.ani_translate_clade(df_ani_clade, assembly_to_user_id)
         user_to_clade = self.match_top_clade(ani_clades)
 
-        with open(self.paths.json_user_to_clade, 'w') as fh:
-            fh.write(json.dumps(user_to_clade))
-
         no_clade = set()
         for genome_id in user_genome_files:
             if genome_id not in user_to_clade:
@@ -189,6 +186,9 @@ class BERDLPreGenome:
         if len(no_clade) > 0:
             for genome_id in no_clade:
                 user_to_clade[genome_id] = 'none'
+
+        with open(self.paths.json_user_to_clade, 'w') as fh:
+            fh.write(json.dumps(user_to_clade))
 
         ani_fitness = None
         if df_ani_fitness is not None:

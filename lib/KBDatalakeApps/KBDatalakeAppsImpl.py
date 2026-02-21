@@ -299,6 +299,8 @@ Author: chenry
                 print(f'found input genome pangenome assignments: {path_user_to_clade_json}')
                 with open(path_user_to_clade_json, 'r') as fh:
                     input_genome_to_clade = json.load(fh)
+            else:
+                print(f'{path_user_to_clade_json} NOT FOUND')
 
             for genome_name, clade in input_genome_to_clade.items():
                 if clade not in clade_to_input_genomes:
