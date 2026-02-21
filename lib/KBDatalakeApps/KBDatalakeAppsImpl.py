@@ -358,6 +358,8 @@ Author: chenry
                 print(f'Found pangenome folder: {folder_pangenome}')
                 # run pangenome pipeline for - folder_pangenome
                 if not skip_pangenome:
+                    if folder_pangenome == 'none':
+                        warnings.append('Input genome contains genome(s) with no pangenome match.')
                     self.run_pangenome_pipeline(input_params.resolve(), folder_pangenome)
                 else:
                     print('skip pangenome')
